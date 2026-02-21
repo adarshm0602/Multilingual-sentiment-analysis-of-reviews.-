@@ -1,0 +1,71 @@
+# Configuration for Multilingual Sentiment Analysis Project
+
+# Directory paths
+paths:
+  data:
+    raw: "data/raw"
+    processed: "data/processed"
+    models: "data/models"
+  src:
+    preprocessing: "src/preprocessing"
+    models: "src/models"
+    utils: "src/utils"
+  outputs:
+    logs: "logs"
+    results: "results"
+
+# Model configurations
+models:
+  transliteration:
+    name: "ai4bharat/IndicXlit"
+    source_lang: "en"
+    target_lang: "kn"
+  translation:
+    name: "ai4bharat/IndicTrans2"
+    source_lang: "kan_Knda"
+    target_lang: "eng_Latn"
+    # Backend options: "indictrans2" (offline), "google" (online, needs API key), "fallback" (dictionary)
+    backend: "indictrans2"
+    # Set to true to automatically fall back to simpler backends on failure
+    auto_fallback: true
+    # Maximum characters per segment for long text translation
+    max_segment_length: 500
+    # Retry settings
+    max_retries: 3
+    retry_delay: 1.0
+  sentiment:
+    name: "nlptown/bert-base-multilingual-uncased-sentiment"
+    num_labels: 3
+    labels:
+      - "negative"
+      - "neutral"
+      - "positive"
+
+# Processing parameters
+processing:
+  batch_size: 32
+  max_text_length: 512
+  num_workers: 4
+  seed: 42
+  train_test_split: 0.2
+  validation_split: 0.1
+
+# Streamlit app settings
+app:
+  title: "Kannada Sentiment Analysis"
+  description: "Analyze sentiment in Kannada text and reviews"
+  port: 8501
+  theme:
+    primary_color: "#FF4B4B"
+    background_color: "#FFFFFF"
+    text_color: "#262730"
+  supported_languages:
+    - "kannada"
+    - "english"
+    - "hindi"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/app.log"
