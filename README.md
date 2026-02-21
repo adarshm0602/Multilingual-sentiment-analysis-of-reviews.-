@@ -25,16 +25,6 @@
 
 ---
 
-## Team Members
-
-| Member | Role |
-|--------|------|
-| Adarsh M | Project Lead · Pipeline Architecture · Streamlit App |
-| Team Member 2 | *(edit)* |
-| Team Member 3 | *(edit)* |
-
----
-
 ## Problem Statement & Motivation
 
 E-commerce platforms such as Amazon, Flipkart, and Meesho serve hundreds of millions of
