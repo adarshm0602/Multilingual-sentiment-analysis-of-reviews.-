@@ -1,12 +1,73 @@
 """
 Kannada Sentiment Analysis Pipeline.
 
-Orchestrates the full end-to-end multilingual processing pipeline:
+This module is the top-level orchestrator for the multilingual sentiment
+analysis system.  It wires together the four processing stages — language
+detection, transliteration, translation, and sentiment classification —
+and provides both a single-item API (:meth:`KannadaSentimentPipeline.process`)
+and a parallel batch API (:meth:`KannadaSentimentPipeline.process_batch`).
 
-    Kannada script    → translate → sentiment
-    Romanized Kannada → transliterate → translate → sentiment
-    English           → sentiment directly
-    Mixed / Unknown   → best-effort sentiment
+Routing logic
+-------------
+Each input text is routed through a different preprocessing chain depending
+on its detected language / script:
+
+::
+
+    Input text
+        │
+        ▼  Stage 1: LanguageDetector
+        ├─► "kannada_script"    → Stage 3 (translate) → Stage 4 (classify)
+        ├─► "romanized_kannada" → Stage 2 (transliterate) → Stage 3 → Stage 4
+        ├─► "english"           → Stage 4 directly
+        └─► "mixed" / "unknown" → Stage 4 (best-effort, warning logged)
+
+Parallel batch processing
+-------------------------
+:meth:`~KannadaSentimentPipeline.process_batch` uses
+:class:`~concurrent.futures.ProcessPoolExecutor` by default.  Each worker
+process receives only lightweight constructor kwargs; the ML models are
+**not** pickled — they are re-initialised inside each worker via the
+module-level :func:`_worker_initializer` / :func:`_worker_process_one`
+pattern (required for ``spawn``-based multiprocessing on macOS / Windows).
+
+In interactive sessions (Jupyter, IPython) where ``spawn`` cannot import
+``__main__``, the implementation falls back automatically to a
+:class:`~concurrent.futures.ThreadPoolExecutor`.
+
+Public symbols
+--------------
+* :class:`PipelineError`              — unrecoverable pipeline exception.
+* :class:`KannadaSentimentPipeline`   — main pipeline class.
+* :func:`load_pipeline_from_config`   — factory using ``config.yaml``.
+
+Module-level helpers (not part of the public API but needed for pickling)
+--------------------------------------------------------------------------
+* :func:`_worker_initializer`  — called once per worker process at start-up.
+* :func:`_worker_process_one`  — processes a single ``(index, text)`` pair.
+
+Example
+-------
+>>> from src.pipeline import KannadaSentimentPipeline
+>>> pipeline = KannadaSentimentPipeline(
+...     translation_backend="fallback",
+...     use_transliteration_model=False,
+... )
+
+>>> # Single review
+>>> result = pipeline.process("ಈ ಉತ್ಪನ್ನ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ")
+>>> result["sentiment_label"]
+'Positive'
+>>> result["pipeline_steps"]
+['language_detection', 'translation', 'sentiment_classification']
+
+>>> # Batch
+>>> df = pipeline.process_batch(
+...     ["Great quality!", "tumba ketta", "ಚೆನ್ನಾಗಿದೆ"],
+...     show_progress=False,
+... )
+>>> list(df["sentiment_label"])
+['Positive', 'Negative', 'Positive']
 """
 
 import logging
@@ -40,7 +101,12 @@ except ImportError:  # pragma: no cover
 
 
 class _NoOpBar:
-    """Silent stand-in when tqdm is unavailable."""
+    """Silent progress-bar stand-in used when tqdm is unavailable.
+
+    Implements the same interface as a ``tqdm`` instance so callers need
+    not check for ``None`` before calling :meth:`update`, :meth:`set_postfix`,
+    or :meth:`close`.  All methods are no-ops.
+    """
     def __init__(self, *_, **__): pass
     def update(self, n=1): pass
     def set_postfix(self, **__): pass
@@ -140,7 +206,16 @@ _EMPTY_ROW: Dict[str, Any] = {
 
 
 def _flatten(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a ``process()`` result dict to a flat DataFrame-ready row."""
+    """Convert a :meth:`~KannadaSentimentPipeline.process` result dict to a flat DataFrame row.
+
+    Args:
+        result: The dict returned by :meth:`KannadaSentimentPipeline.process`.
+
+    Returns:
+        A flat dict whose keys match :data:`_DF_COLUMNS`.  List / dict
+        fields (``pipeline_steps``, ``errors``, ``timings``) are collapsed
+        to comma-/semicolon-joined strings and a single float respectively.
+    """
     errors = result.get("errors", [])
     return {
         "original_text": result.get("original_text"),
@@ -158,6 +233,16 @@ def _flatten(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _error_row(text: Any, error: str) -> Dict[str, Any]:
+    """Build a DataFrame row representing a failed processing attempt.
+
+    Args:
+        text: The original input value (may be non-string if validation failed).
+        error: Human-readable error description.
+
+    Returns:
+        A flat dict with ``status='error'`` and default sentinel values for
+        all analysis fields.
+    """
     row = dict(_EMPTY_ROW)
     row["original_text"] = text
     row["errors"] = error
@@ -166,6 +251,17 @@ def _error_row(text: Any, error: str) -> Dict[str, Any]:
 
 
 def _skipped_row(text: Any, reason: str) -> Dict[str, Any]:
+    """Build a DataFrame row for an item that was skipped before processing.
+
+    Items are skipped when they are not strings or are empty / whitespace-only.
+
+    Args:
+        text: The original input value.
+        reason: Human-readable reason for skipping.
+
+    Returns:
+        A flat dict with ``status='skipped'`` and default sentinel values.
+    """
     row = dict(_EMPTY_ROW)
     row["original_text"] = text
     row["errors"] = reason
@@ -174,7 +270,17 @@ def _skipped_row(text: Any, reason: str) -> Dict[str, Any]:
 
 
 def _make_pbar(total: int, show: bool) -> Any:
-    """Return an active tqdm bar or the silent no-op."""
+    """Create a tqdm progress bar or a silent :class:`_NoOpBar`.
+
+    Args:
+        total: Total number of items to track.
+        show: If ``True`` and tqdm is installed, return a live progress bar.
+            If ``False`` or tqdm is unavailable, return a :class:`_NoOpBar`.
+
+    Returns:
+        A tqdm bar (or compatible no-op object) that supports ``update()``,
+        ``set_postfix()``, ``close()``, and context-manager protocol.
+    """
     if show and _TQDM_AVAILABLE:
         return _tqdm(
             total=total,
@@ -263,6 +369,42 @@ class KannadaSentimentPipeline:
         google_api_key: Optional[str] = None,
         auto_fallback: bool = True,
     ) -> None:
+        """Initialise all pipeline components.
+
+        Each component is constructed eagerly; the sentiment classifier's
+        underlying model is loaded lazily on the first :meth:`process` call.
+
+        Args:
+            translation_backend: Which translation engine to use.
+                One of ``'indictrans2'`` (default, offline), ``'google'``
+                (requires API key and internet), or ``'fallback'``
+                (dictionary-based, always available).
+            use_transliteration_model: Whether to attempt loading the
+                IndicXlit neural transliteration model.  Set to ``False``
+                to use only the built-in fallback dictionary (no heavy
+                dependencies, suitable for testing).
+            classifier_model_name: HuggingFace model identifier passed to
+                :class:`~src.models.sentiment_classifier.SentimentClassifier`.
+                Defaults to ``'distilbert-base-uncased-finetuned-sst-2-english'``.
+            classifier_model_path: Absolute path to a locally cached model
+                directory.  When supplied, the model is loaded from disk
+                instead of being downloaded from HuggingFace.
+            google_api_key: Google Cloud Translate API key.  Only required
+                when ``translation_backend='google'``.  Can also be supplied
+                via the ``GOOGLE_TRANSLATE_API_KEY`` environment variable.
+            auto_fallback: If ``True`` (default), the :class:`Translator`
+                will automatically fall back to simpler backends when the
+                preferred one is unavailable.
+
+        Example:
+            >>> # Fully offline, no heavy model downloads
+            >>> pipeline = KannadaSentimentPipeline(
+            ...     translation_backend="fallback",
+            ...     use_transliteration_model=False,
+            ... )
+            >>> pipeline.process("Hello world")["sentiment_label"]
+            'Positive'
+        """
         logger.info("Initializing KannadaSentimentPipeline…")
 
         t0 = time.perf_counter()
@@ -554,7 +696,20 @@ class KannadaSentimentPipeline:
     def _extract_texts(
         self, inputs: Any, text_column: str
     ) -> List[Any]:
-        """Return a plain list of raw values from a list or DataFrame."""
+        """Normalise *inputs* to a plain list of raw cell values.
+
+        Args:
+            inputs: Either a ``list[str]`` or a ``pandas.DataFrame``.
+            text_column: Column name to read when *inputs* is a DataFrame.
+
+        Returns:
+            Plain Python list of values (not necessarily strings; type
+            checking happens in the caller).
+
+        Raises:
+            ValueError: If *inputs* is a DataFrame and *text_column* is absent.
+            TypeError: If *inputs* is neither a list nor a DataFrame.
+        """
         if _PANDAS_AVAILABLE and isinstance(inputs, pd.DataFrame):
             if text_column not in inputs.columns:
                 raise ValueError(
@@ -577,7 +732,20 @@ class KannadaSentimentPipeline:
         chunk_size: int,
         show_progress: bool,
     ) -> None:
-        """Submit items to a ProcessPoolExecutor and collect results."""
+        """Dispatch *items* via :class:`~concurrent.futures.ProcessPoolExecutor`.
+
+        Falls back to :meth:`_run_thread_pool` transparently if the process
+        pool raises (e.g., in interactive sessions where ``spawn`` cannot
+        import ``__main__``).
+
+        Args:
+            items: List of ``(original_index, text)`` pairs to process.
+            rows: Mutable dict mapping original indices to flat result rows;
+                updated in-place as futures complete.
+            workers: Maximum number of worker processes.
+            chunk_size: Number of futures to keep in-flight at once.
+            show_progress: Whether to display a tqdm progress bar.
+        """
         try:
             self._execute_parallel(
                 items, rows, workers, chunk_size, show_progress,
@@ -603,7 +771,19 @@ class KannadaSentimentPipeline:
         chunk_size: int,
         show_progress: bool,
     ) -> None:
-        """Submit items to a ThreadPoolExecutor and collect results."""
+        """Dispatch *items* via :class:`~concurrent.futures.ThreadPoolExecutor`.
+
+        Used in interactive sessions or when ``use_multiprocessing=False``.
+        PyTorch releases the GIL during tensor operations, so threads still
+        achieve meaningful parallelism for the inference-heavy steps.
+
+        Args:
+            items: List of ``(original_index, text)`` pairs to process.
+            rows: Mutable dict updated in-place as futures complete.
+            workers: Maximum number of worker threads.
+            chunk_size: Sliding-window submission batch size.
+            show_progress: Whether to display a tqdm progress bar.
+        """
         self._execute_parallel(
             items, rows, workers, chunk_size, show_progress,
             use_processes=False,
@@ -619,11 +799,27 @@ class KannadaSentimentPipeline:
         *,
         use_processes: bool,
     ) -> None:
-        """
-        Core parallel executor shared by both pool strategies.
+        """Core parallel executor shared by both pool strategies.
 
-        Submits all *items* as individual futures, then collects results
-        as they complete while ticking the progress bar.
+        Uses a **sliding-window submission** pattern: instead of creating
+        ``len(items)`` futures at once (which would exhaust memory for huge
+        batches), only ``chunk_size`` futures are live at any moment.
+        As each future completes, a new one is submitted from the pending
+        queue.
+
+        The :func:`as_completed` iterator is re-entered on each loop
+        iteration so that newly submitted futures are visible immediately.
+
+        Args:
+            items: ``(original_index, text)`` pairs to process.
+            rows: Mutable result dict; updated in-place.
+            workers: Executor concurrency limit.
+            chunk_size: Sliding-window size (futures in flight at once).
+            show_progress: Whether to tick the progress bar.
+            use_processes: ``True`` → ``ProcessPoolExecutor`` with
+                :func:`_worker_initializer` / :func:`_worker_process_one`;
+                ``False`` → ``ThreadPoolExecutor`` with
+                :meth:`_process_one_in_thread`.
         """
         executor_cls = ProcessPoolExecutor if use_processes else ThreadPoolExecutor
 
@@ -701,14 +897,39 @@ class KannadaSentimentPipeline:
                 pbar.close()
 
     def _submit_one(self, executor: Any, item: tuple, use_processes: bool) -> Any:
-        """Submit a single item to the executor using the right worker fn."""
+        """Submit a single ``(original_index, text)`` item to *executor*.
+
+        Chooses the correct worker function depending on the executor type:
+        * Process pool → module-level :func:`_worker_process_one` (picklable).
+        * Thread pool  → :meth:`_process_one_in_thread` (closure, not pickled).
+
+        Args:
+            executor: An active :class:`~concurrent.futures.Executor` instance.
+            item: ``(original_index, text)`` tuple to submit.
+            use_processes: Selects which worker function to use.
+
+        Returns:
+            A :class:`~concurrent.futures.Future` representing the pending result.
+        """
         if use_processes:
             return executor.submit(_worker_process_one, item)
         # Thread pool: use a closure so self is captured without pickling.
         return executor.submit(self._process_one_in_thread, item)
 
     def _process_one_in_thread(self, indexed_text: tuple) -> tuple:
-        """Thread-pool variant — runs inside the main process."""
+        """Thread-pool worker — runs in the main process, no pickling required.
+
+        Calls :meth:`process` on *self* directly.  Unlike the process-pool
+        path, this method can use the already-loaded ML models without
+        re-initialisation overhead.
+
+        Args:
+            indexed_text: ``(original_index, text)`` pair.
+
+        Returns:
+            ``(original_index, result_dict, None)`` on success or
+            ``(original_index, None, error_str)`` on failure.
+        """
         idx, text = indexed_text
         try:
             return idx, self.process(text), None
@@ -718,7 +939,20 @@ class KannadaSentimentPipeline:
     def _build_dataframe(
         self, rows: Dict[int, Dict[str, Any]], total_n: int
     ) -> Any:  # pd.DataFrame
-        """Assemble the ordered DataFrame from the collected result rows."""
+        """Assemble the final DataFrame from the collected result rows.
+
+        Rows are sorted by their original index so the output order matches
+        the input order regardless of completion order.
+
+        Args:
+            rows: Dict mapping original input indices to flat result dicts.
+            total_n: Total number of inputs (some may have been skipped
+                before reaching the executor and will already be in *rows*).
+
+        Returns:
+            :class:`pandas.DataFrame` with columns :data:`_DF_COLUMNS`,
+            one row per input, index reset to 0-based integers.
+        """
         ordered = [rows[i] for i in range(total_n) if i in rows]
         df = pd.DataFrame(ordered, columns=_DF_COLUMNS)
         return df.reset_index(drop=True)
@@ -730,7 +964,22 @@ class KannadaSentimentPipeline:
     def _detect_language(
         self, text: str, result: Dict[str, Any]
     ) -> DetectionResult:
-        """Run language detection and write results into *result*."""
+        """Run language detection and populate *result* with detection fields.
+
+        Times the detection step and records the elapsed time under
+        ``result['timings']['language_detection']``.  On failure, appends
+        an error message to ``result['errors']`` and returns a safe default
+        :class:`DetectionResult` with ``language='unknown'`` so the pipeline
+        can continue.
+
+        Args:
+            text: Raw input string.
+            result: The in-progress result dict (mutated in-place).
+
+        Returns:
+            A :class:`~src.preprocessing.language_detector.DetectionResult`
+            instance.  Never raises.
+        """
         step = "language_detection"
         t0 = time.perf_counter()
         result["pipeline_steps"].append(step)
@@ -770,10 +1019,21 @@ class KannadaSentimentPipeline:
         detection: DetectionResult,
         result: Dict[str, Any],
     ) -> Optional[str]:
-        """
-        Choose the right preprocessing path and return the text to classify.
+        """Select and execute the preprocessing chain for *text*.
 
-        Returns ``None`` only if a fatal error prevents any output.
+        Dispatches to the correct sequence of transliteration / translation
+        stages based on ``detection.language`` and returns the English-ready
+        text to feed into the sentiment classifier.
+
+        Args:
+            text: Original input text.
+            detection: Output of :meth:`_detect_language`.
+            result: In-progress result dict (mutated in-place via the
+                helper methods it delegates to).
+
+        Returns:
+            English text ready for sentiment classification, or ``None`` if
+            a fatal error prevents any output.
         """
         lang = detection.language
 
@@ -798,10 +1058,19 @@ class KannadaSentimentPipeline:
         return text
 
     def _transliterate(self, text: str, result: Dict[str, Any]) -> str:
-        """
-        Transliterate romanized Kannada to Kannada script.
+        """Transliterate Romanized Kannada to native Kannada script.
 
-        Returns the original text on any error so the pipeline can continue.
+        Times the transliteration step and records the result in
+        ``result['transliterated_text']``.  On failure, logs an error,
+        appends to ``result['errors']``, and returns the original *text*
+        unchanged so translation can still be attempted.
+
+        Args:
+            text: Romanized Kannada text (Latin script).
+            result: In-progress result dict (mutated in-place).
+
+        Returns:
+            Native Kannada script text on success; *text* unchanged on failure.
         """
         step = "transliteration"
         t0 = time.perf_counter()
@@ -830,10 +1099,19 @@ class KannadaSentimentPipeline:
             return text
 
     def _translate(self, text: str, result: Dict[str, Any]) -> str:
-        """
-        Translate Kannada (native script) to English.
+        """Translate Kannada (native script) to English.
 
-        Returns the pre-translation text on any error.
+        Times the translation step and records the output in
+        ``result['translated_text']``.  On failure, logs an error, appends
+        to ``result['errors']``, and returns *text* unchanged so sentiment
+        classification can still be attempted on the Kannada input.
+
+        Args:
+            text: Kannada Unicode text to translate.
+            result: In-progress result dict (mutated in-place).
+
+        Returns:
+            English translation on success; *text* unchanged on failure.
         """
         step = "translation"
         t0 = time.perf_counter()
@@ -867,10 +1145,20 @@ class KannadaSentimentPipeline:
             return text
 
     def _classify_sentiment(self, text: str, result: Dict[str, Any]) -> None:
-        """
-        Run sentiment classification and write results into *result*.
+        """Run sentiment classification and populate *result* with the output.
 
-        On failure the defaults (``'Neutral'``, ``0.0``) are preserved.
+        Times the classification step and records ``sentiment_label`` and
+        ``confidence_score`` in *result*.  On failure, logs the error,
+        appends to ``result['errors']``, and leaves the sentinel defaults
+        (``'Neutral'``, ``0.0``) in place.
+
+        Args:
+            text: English text to classify (output of :meth:`_translate` or
+                the original text for English / mixed inputs).
+            result: In-progress result dict (mutated in-place).
+
+        Returns:
+            ``None``.  All output is written directly into *result*.
         """
         step = "sentiment_classification"
         t0 = time.perf_counter()
@@ -902,7 +1190,20 @@ class KannadaSentimentPipeline:
 # ---------------------------------------------------------------------------
 
 def _ms(t0: float) -> str:
-    """Return elapsed milliseconds since *t0* as a formatted string."""
+    """Format the elapsed time since *t0* as a human-readable string.
+
+    Args:
+        t0: Start timestamp from :func:`time.perf_counter`.
+
+    Returns:
+        String like ``'12.3ms'`` showing elapsed milliseconds.
+
+    Example:
+        >>> import time
+        >>> t = time.perf_counter()
+        >>> _ms(t)   # near-instant call
+        '0.0ms'
+    """
     return f"{(time.perf_counter() - t0) * 1000:.1f}ms"
 
 
@@ -921,6 +1222,12 @@ def load_pipeline_from_config() -> KannadaSentimentPipeline:
     Returns
     -------
     KannadaSentimentPipeline
+
+    Example:
+        >>> pipeline = load_pipeline_from_config()
+        >>> result = pipeline.process("Hello world")
+        >>> result["sentiment_label"] in ("Positive", "Negative", "Neutral")
+        True
     """
     import os
 

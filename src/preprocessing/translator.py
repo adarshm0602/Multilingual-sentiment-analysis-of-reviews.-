@@ -1,8 +1,62 @@
 """
 Translation Module for Kannada Sentiment Analysis.
 
-This module provides functionality to translate Kannada text to English
-using either AI4Bharat's IndicTrans2 model (offline) or Google Translate API (online).
+Translates Kannada text to English using one of three interchangeable
+backends, selected at construction time with automatic fallback:
+
+Backends
+--------
+``indictrans2``
+    AI4Bharat's IndicTrans2 (``ai4bharat/indictrans2-indic-en-1B``).
+    Offline, high quality, ~3 GB download on first use.  Requires
+    ``transformers`` and sufficient RAM (~4 GB).
+
+``google``
+    Google Cloud Translate REST API.  Requires an API key stored in the
+    ``GOOGLE_TRANSLATE_API_KEY`` environment variable (or passed directly).
+    Needs internet access; billed per character.
+
+``fallback``
+    Built-in word-by-word dictionary (~40 entries).  Always available,
+    no network or heavy models required.  Accuracy is limited to words
+    present in the dictionary.
+
+Auto-fallback chain
+-------------------
+When ``auto_fallback=True`` (default) and the preferred backend fails, the
+:class:`Translator` tries the next available backend:
+
+    indictrans2 → google → fallback
+
+Long-text segmentation
+----------------------
+Texts longer than ``max_segment_length`` (default 500 chars) are split at
+sentence boundaries first, then at word boundaries.  Each segment is
+translated independently and the results are rejoined with a single space.
+
+Public symbols
+--------------
+* :class:`TranslationBackend`  — enum of the three backend identifiers.
+* :class:`TranslationResult`   — dataclass returned by :meth:`Translator.translate`.
+* :class:`TranslationError`    — raised when a backend call fails.
+* :class:`BaseTranslator`      — abstract base class for backend implementations.
+* :class:`IndicTrans2Translator`, :class:`GoogleTranslator`,
+  :class:`FallbackTranslator`  — concrete backends.
+* :class:`Translator`          — unified interface managing all backends.
+* :func:`translate_kannada_to_english` — module-level convenience wrapper.
+* :func:`load_config_translator`       — factory using ``config.yaml``.
+
+Example
+-------
+>>> from src.preprocessing.translator import Translator
+>>> tr = Translator(backend="fallback")
+>>> result = tr.translate("ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ")
+>>> result.translated
+'very is good'
+>>> result.success
+True
+>>> result.backend.value
+'fallback'
 """
 
 import re
@@ -87,16 +141,44 @@ def retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0):
 
 
 class BaseTranslator(ABC):
-    """Abstract base class for translation backends."""
+    """Abstract base class defining the interface for translation backends.
+
+    All concrete translation backends must subclass this and implement
+    :meth:`translate` and :meth:`is_available`.  The :class:`Translator`
+    facade delegates to whichever concrete backend is currently active.
+
+    Subclasses
+    ----------
+    * :class:`IndicTrans2Translator`
+    * :class:`GoogleTranslator`
+    * :class:`FallbackTranslator`
+    """
 
     @abstractmethod
     def translate(self, text: str) -> str:
-        """Translate text from Kannada to English."""
+        """Translate *text* from Kannada to English.
+
+        Args:
+            text: Kannada-language text to translate.
+
+        Returns:
+            English translation of *text*.
+
+        Raises:
+            TranslationError: If the backend call fails.
+        """
         pass
 
     @abstractmethod
     def is_available(self) -> bool:
-        """Check if the translator backend is available."""
+        """Return ``True`` if this backend is ready to accept translation requests.
+
+        Called by :class:`Translator` to determine whether the backend was
+        successfully initialized and can handle requests right now.
+
+        Returns:
+            ``True`` when the backend is operational, ``False`` otherwise.
+        """
         pass
 
 
@@ -117,7 +199,14 @@ class IndicTrans2Translator(BaseTranslator):
         self._initialize()
 
     def _initialize(self):
-        """Initialize the IndicTrans2 model."""
+        """Download and load the IndicTrans2 model and tokenizer.
+
+        Attempts to load ``ai4bharat/indictrans2-indic-en-1B`` from the
+        HuggingFace Hub (downloaded to the local cache on first call).
+        Sets ``self._available = True`` on success; logs a warning and
+        sets ``False`` on any failure so :class:`Translator` can fall back
+        gracefully.
+        """
         try:
             # Try to import and initialize the model
             from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -221,7 +310,12 @@ class GoogleTranslator(BaseTranslator):
         self._initialize()
 
     def _initialize(self):
-        """Initialize Google Translate client."""
+        """Validate the API key and initialize the Google Translate client.
+
+        Tries the ``google-cloud-translate`` library first; if unavailable,
+        falls back to making raw REST calls via ``requests``.  Sets
+        ``self._available = False`` when no API key is configured.
+        """
         if not self._api_key:
             logger.warning(
                 "Google Translate API key not provided. "
@@ -291,7 +385,22 @@ class GoogleTranslator(BaseTranslator):
             raise TranslationError(f"Google Translate failed: {e}")
 
     def _translate_with_rest_api(self, text: str) -> str:
-        """Translate using Google Translate REST API."""
+        """Translate *text* using the Google Cloud Translation REST API v2.
+
+        This path is used when the ``google-cloud-translate`` library is not
+        installed.  It calls the JSON/REST endpoint directly with the
+        configured API key.
+
+        Args:
+            text: The Kannada text to translate.
+
+        Returns:
+            The English translation from the API response.
+
+        Raises:
+            TranslationError: If the HTTP request fails or the response
+                format is unexpected.
+        """
         import requests
 
         url = "https://translation.googleapis.com/language/translate/v2"
@@ -316,11 +425,18 @@ class GoogleTranslator(BaseTranslator):
 
 
 class FallbackTranslator(BaseTranslator):
-    """
-    Fallback translator using basic word-by-word dictionary lookup.
+    """Dictionary-based Kannada→English translator.
 
-    This is a simple fallback when other translators are unavailable.
-    It's not accurate but provides some basic translation capability.
+    This backend performs a simple word-by-word lookup against a built-in
+    dictionary of ~40 common Kannada words.  Words not found in the
+    dictionary are returned unchanged.
+
+    Unlike the neural backends, this translator:
+    * Requires no external dependencies or network access.
+    * Is always available (``is_available()`` always returns ``True``).
+    * Produces partial translations — unknown words remain in Kannada.
+
+    It is used as the final fallback in the auto-fallback chain.
     """
 
     # Basic Kannada to English dictionary for common words
@@ -422,7 +538,18 @@ class FallbackTranslator(BaseTranslator):
         return " ".join(translated_words)
 
     def add_translation(self, kannada: str, english: str) -> None:
-        """Add a word to the dictionary."""
+        """Add a single Kannada→English entry to the runtime dictionary.
+
+        Args:
+            kannada: The Kannada word or phrase to add.
+            english: The corresponding English translation.
+
+        Example:
+            >>> ft = FallbackTranslator()
+            >>> ft.add_translation("ಹೊಸ", "new")
+            >>> ft.translate("ಹೊಸ product")
+            'new product'
+        """
         self._dictionary[kannada] = english
 
 
@@ -481,7 +608,16 @@ class Translator:
         logger.info(f"Active translation backend: {self._active_backend.value}")
 
     def _initialize_translators(self, google_api_key: Optional[str]) -> None:
-        """Initialize all translator backends."""
+        """Instantiate all backend objects that may be needed.
+
+        The fallback translator is always created.  IndicTrans2 and Google
+        backends are only created when they are the preferred choice or when
+        ``auto_fallback=True`` is set, to avoid unnecessary model downloads.
+
+        Args:
+            google_api_key: API key to pass to :class:`GoogleTranslator`.
+                ``None`` causes that backend to self-report as unavailable.
+        """
         # Always initialize fallback
         self._translators[TranslationBackend.FALLBACK] = FallbackTranslator()
 
@@ -502,7 +638,16 @@ class Translator:
                 logger.warning(f"Failed to initialize Google Translate: {e}")
 
     def _select_backend(self) -> TranslationBackend:
-        """Select the best available backend."""
+        """Select the best currently-available backend.
+
+        Probes the preferred backend first; if it reports ``is_available()
+        == False``, and ``auto_fallback`` is enabled, tries IndicTrans2 then
+        Google then the dictionary fallback.
+
+        Returns:
+            The :class:`TranslationBackend` enum value for the backend that
+            will be used for subsequent :meth:`translate` calls.
+        """
         # Try preferred backend first
         if self.backend in self._translators:
             translator = self._translators[self.backend]
@@ -756,6 +901,12 @@ def load_config_translator() -> Translator:
 
     Returns:
         Configured Translator instance.
+
+    Example:
+        >>> translator = load_config_translator()
+        >>> result = translator.translate("ಚೆನ್ನಾಗಿದೆ")
+        >>> result.success
+        True
     """
     import os
     from pathlib import Path

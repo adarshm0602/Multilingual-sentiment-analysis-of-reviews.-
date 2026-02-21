@@ -1,17 +1,78 @@
 """
 Sentiment Classification Module for Kannada Sentiment Analysis.
 
-This module provides a SentimentClassifier class that uses pre-trained
-transformer models (DistilBERT) to classify text sentiment as Positive,
-Negative, or Neutral with confidence scores.
+This module provides a :class:`SentimentClassifier` that wraps HuggingFace
+transformer models and exposes a clean, batched inference API for
+classifying English text as Positive, Negative, or Neutral.
 
-The classifier is optimized for CPU inference with:
-- Small batch sizes (1-2)
-- Optional model quantization for faster inference
-- Efficient preprocessing with truncation and padding
+Architecture
+------------
+::
 
-Pipeline Overview:
-    Input Text → Tokenization → Model Inference → Softmax → Label + Confidence
+    Input text
+        │
+        ▼
+    Tokenizer (AutoTokenizer)
+        │  token IDs + attention mask
+        ▼
+    Transformer model (AutoModelForSequenceClassification)
+        │  raw logits  [batch_size × num_labels]
+        ▼
+    Softmax → probability distribution
+        │
+        ▼
+    argmax → predicted label index
+        │
+        ▼
+    Label mapping (MODEL_LABEL_MAPPINGS) → SentimentLabel enum
+        │
+        ▼
+    SentimentResult dataclass
+
+Supported models
+----------------
+The classifier ships with pre-configured label mappings for:
+
+* ``distilbert-base-uncased-finetuned-sst-2-english`` (default) —
+  2-class binary model (Negative / Positive).
+* ``cardiffnlp/twitter-roberta-base-sentiment-latest`` —
+  3-class model (Negative / Neutral / Positive).
+* ``nlptown/bert-base-multilingual-uncased-sentiment`` —
+  5-class star-rating model; stars 1–2 → Negative, 3 → Neutral, 4–5 → Positive.
+
+Any model not in ``MODEL_LABEL_MAPPINGS`` defaults to binary
+(0 = Negative, 1 = Positive) with a warning.
+
+CPU optimizations
+-----------------
+* Small default batch size (2) to stay within RAM budgets.
+* Optional ``torch.quantization.quantize_dynamic`` for int8 inference.
+* Lazy loading — the model and tokenizer are not loaded until the first
+  :meth:`~SentimentClassifier.classify` call.
+
+Public symbols
+--------------
+* :class:`SentimentLabel`      — Positive / Negative / Neutral enum.
+* :class:`SentimentResult`     — dataclass holding classification output.
+* :class:`SentimentClassifier` — main classifier class.
+* :func:`classify_sentiment`   — convenience one-liner.
+* :func:`load_classifier_from_config` — factory using ``config.yaml``.
+
+Example
+-------
+>>> from src.models.sentiment_classifier import SentimentClassifier
+>>> clf = SentimentClassifier()            # loads lazily on first call
+>>> result = clf.classify("This product is amazing!")
+>>> result.label.value
+'Positive'
+>>> f"{result.confidence:.2%}"
+'99.50%'
+
+>>> # Batch processing
+>>> texts = ["Great quality!", "Terrible service", "It's okay I guess"]
+>>> results = clf.classify_batch(texts)
+>>> [r.label.value for r in results]
+['Positive', 'Negative', 'Negative']
 """
 
 import logging

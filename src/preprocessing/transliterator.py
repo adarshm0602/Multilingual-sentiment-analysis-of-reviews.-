@@ -1,9 +1,53 @@
 """
 Transliteration Module for Kannada Sentiment Analysis.
 
-This module provides functionality to transliterate Romanized Kannada
-text to native Kannada script using AI4Bharat's IndicXlit model with
-fallback to a phonetic mapping dictionary.
+Converts Romanized Kannada text (Kanglish, written in Latin script) into
+native Kannada Unicode script using a two-tier approach:
+
+1. **IndicXlit neural model** (AI4Bharat) — high-quality, context-aware
+   transliteration when the ``ai4bharat-transliteration`` package and
+   ``fairseq`` are available.  On Python 3.11+ ``fairseq`` has known
+   compatibility issues; the initializer catches these and falls back
+   automatically.
+2. **Fallback phonetic dictionary** — 166 hand-curated Romanized→Kannada
+   mappings covering common review vocabulary, sentiment words, pronouns,
+   place names, and connectors.  Always available; no dependencies beyond
+   the standard library.
+
+Processing strategy for each word
+----------------------------------
+1. Skip if already Kannada script (Unicode block U+0C80–U+0CFF).
+2. Skip pure numeric or non-alpha tokens.
+3. Try IndicXlit (if loaded).
+4. Try exact / punctuation-stripped fallback dict lookup.
+5. Return original unchanged if no mapping found.
+
+Public symbols
+--------------
+* :class:`TransliterationResult` — dataclass with full transliteration output.
+* :class:`TransliterationError`  — raised on unrecoverable failures.
+* :class:`Transliterator`        — main transliteration class.
+* :func:`transliterate_to_kannada` — convenience one-liner.
+
+Example
+-------
+>>> from src.preprocessing.transliterator import Transliterator
+>>> t = Transliterator(use_model=False)   # dict-only, no heavy deps
+
+>>> # Sentence-level
+>>> result = t.transliterate("tumba chennagide")
+>>> result.transliterated
+'ತುಂಬ ಚೆನ್ನಾಗಿದೆ'
+>>> result.method
+'fallback'
+
+>>> # Word-level
+>>> t.transliterate_word("olle")
+('ಒಳ್ಳೆ', 'fallback')
+
+>>> # List API
+>>> t.transliterate_words(["namaskara", "karnataka"])
+['ನಮಸ್ಕಾರ', 'ಕರ್ನಾಟಕ']
 """
 
 import re
@@ -35,7 +79,11 @@ class TransliterationResult:
 
 
 class TransliterationError(Exception):
-    """Custom exception for transliteration failures."""
+    """Raised when transliteration fails in an unrecoverable way.
+
+    This is a thin subclass of :class:`Exception` used to distinguish
+    transliteration-specific failures from generic exceptions in callers.
+    """
     pass
 
 
@@ -570,7 +618,24 @@ class Transliterator:
         Get the current status of the transliterator.
 
         Returns:
-            Dictionary with status information.
+            dict with the following keys:
+
+            ``model_available`` (bool):
+                Whether the IndicXlit neural model loaded successfully.
+            ``fallback_dict_size`` (int):
+                Total number of entries in the active fallback dictionary.
+            ``beam_width`` (int):
+                Beam width used during model inference.
+            ``use_model`` (bool):
+                Whether model loading was attempted at construction time.
+
+        Example:
+            >>> t = Transliterator(use_model=False)
+            >>> status = t.get_status()
+            >>> status['model_available']
+            False
+            >>> status['fallback_dict_size'] > 0
+            True
         """
         return {
             "model_available": self._model_available,

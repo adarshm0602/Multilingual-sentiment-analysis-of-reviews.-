@@ -1,9 +1,56 @@
+
 """
 Language Detection Module for Kannada Sentiment Analysis.
 
-This module provides functionality to detect the language and script type
-of input text, specifically designed for handling Kannada text in both
-native script and romanized forms.
+This module detects whether a piece of text is written in native Kannada
+Unicode script (ಕನ್ನಡ), Romanized Kannada (Kanglish), plain English, a
+mixture of the two, or an unknown language.
+
+Detection strategy
+------------------
+1. **Unicode-block ratio** — count characters in the Kannada Unicode block
+   (U+0C80–U+0CFF) vs. ASCII alpha characters.  A high Kannada ratio
+   immediately resolves the case; a high ASCII ratio triggers step 2.
+2. **Regex heuristics** — match common Romanized Kannada word patterns
+   (e.g. "tumba", "chennagi", "bengaluru") against the Latin text.
+3. **langdetect** — Google's language-detection library provides a
+   supplementary probability signal for disambiguation between Romanized
+   Kannada and ordinary English.
+
+Thresholds (configurable via ``LanguageDetector.__init__``)
+-----------------------------------------------------------
+* ``kannada_threshold``  (default 0.60) — min Kannada-char proportion for
+  ``'kannada_script'`` classification.
+* ``english_threshold``  (default 0.80) — min ASCII-alpha proportion for
+  high-confidence ``'english'`` classification.
+* ``mixed_threshold``    (default 0.40) — below this, neither script is
+  dominant enough → ``'mixed'``.
+
+Public symbols
+--------------
+* :class:`DetectionResult` — dataclass holding the full detection output.
+* :class:`LanguageDetector` — main detection class.
+* :func:`detect_language`   — module-level convenience wrapper.
+
+Example
+-------
+>>> from src.preprocessing.language_detector import LanguageDetector
+>>> detector = LanguageDetector()
+
+>>> # Native Kannada script
+>>> r = detector.detect("ಈ ಉತ್ಪನ್ನ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ")
+>>> r.language, round(r.confidence, 2)
+('kannada_script', 1.0)
+
+>>> # Romanized Kannada (Kanglish)
+>>> r = detector.detect("tumba chennagide, olle product")
+>>> r.language
+'romanized_kannada'
+
+>>> # Plain English
+>>> r = detector.detect("This product has excellent quality.")
+>>> r.language
+'english'
 """
 
 import re
@@ -27,6 +74,14 @@ class DetectionResult:
         confidence: Confidence score between 0 and 1.
         script_proportions: Dictionary with proportions of different scripts.
         details: Additional details about the detection.
+
+    Example:
+        >>> from src.preprocessing.language_detector import LanguageDetector
+        >>> r = LanguageDetector().detect("ಕನ್ನಡ")
+        >>> r.language
+        'kannada_script'
+        >>> r.confidence
+        1.0
     """
     language: LanguageType
     confidence: float
