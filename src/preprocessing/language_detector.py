@@ -120,13 +120,26 @@ class LanguageDetector:
     KANNADA_UNICODE_START = 0x0C80
     KANNADA_UNICODE_END = 0x0CFF
 
-    # Common Romanized Kannada patterns and words
+    # Common Romanized Kannada patterns and words.
+    # Each pattern group covers a different semantic category so that even a
+    # single match from any group is a reliable indicator of Romanized Kannada.
     ROMANIZED_KANNADA_PATTERNS = [
-        r'\b(tumba|chenag|illa|ide|agi|adu|idu|yenu|hegidira|namask[aā]ra)\b',
-        r'\b(kannada|bengaluru|karnataka|mysuru|mangaluru)\b',
-        r'\b(guru|anna|akka|amma|appa|maga|magalu)\b',
-        r'\b(olle|ketta|chennagi|saku|beku|baralla|gottu)\b',
-        r'\b(nanna|ninna|avara|ivara|yavaga|elli|hege)\b',
+        # Intensifiers / quality descriptors
+        r'\b(tumba|chenag|olle|ketta|chennagi|chennagide|chennagilla|jaasti|jaasthi|kammi)\b',
+        # Verb endings and copulas — the most diagnostic markers
+        r'\b(agide|agilla|agidhe|aagide|aagilla|madidini|madidhe|madidu|hogbekilla|baralla|gottilla)\b',
+        # Emotional / experiential words
+        r'\b(ishta|ishtavagide|ishtailla|khushi|santosha|kashtavagide|kasta|bejaar|hodedru)\b',
+        # Place names and cultural markers
+        r'\b(kannada|bengaluru|karnataka|mysuru|mangaluru|hubli|dharwad|belgaum)\b',
+        # Kinship / address terms
+        r'\b(guru|anna|akka|amma|appa|maga|magalu|avru|avara|avrige)\b',
+        # Common verbs / auxiliary words
+        r'\b(saku|beku|illa|ide|agi|idu|yenu|hegidira|mattu|aadare|modalige)\b',
+        # Demonstratives, pronouns, question words (excluding single-char 'ee'/'aa' to avoid false positives)
+        r'\b(adu|idu|nanna|ninna|ivara|yavaga|elli|hege|yaake|yaru)\b',
+        # Transliteration artifacts common in reviews
+        r'\b(namask[aā]ra|dhanyavada|dhanyavaad|gottu|barli|hogbeku|madli)\b',
     ]
 
     def __init__(
@@ -241,36 +254,39 @@ class LanguageDetector:
         Returns:
             A tuple of (is_romanized_kannada, confidence_score).
         """
-        # Check for common Romanized Kannada patterns
+        # Count absolute matches across all pattern groups.
+        # Any genuine Kannada word in a review is a strong indicator — even a
+        # single match suffices to mark the text as Romanized Kannada.
         pattern_matches = 0
         for pattern in self._romanized_patterns:
             matches = pattern.findall(text.lower())
             pattern_matches += len(matches)
 
-        # Calculate pattern-based confidence
-        words = text.split()
-        word_count = len(words) if words else 1
-        pattern_confidence = min(pattern_matches / word_count, 1.0)
+        # Absolute-count confidence: saturates at 1.0 after 3 matches.
+        # Using absolute counts rather than a word-count ratio prevents
+        # code-switched reviews (many English loanwords + few Kannada words)
+        # from being mis-classified as English.
+        pattern_confidence = min(pattern_matches / 3.0, 1.0)
 
-        # Use langdetect for additional verification
-        langdetect_confidence = 0.0
+        # Use langdetect as a supporting signal.
+        # langdetect never returns 'kn' for Latin-script Romanized Kannada;
+        # it typically returns 'ro', 'id', 'af', or other non-English codes.
+        # Treat any non-English top detection as a positive signal.
+        langdetect_boost = 0.0
         try:
             detected_langs = detect_langs(text)
-            for lang in detected_langs:
-                # langdetect doesn't have 'kn' for romanized Kannada
-                # but might detect it as 'id' (Indonesian) or other languages
-                # We rely more on pattern matching for romanized Kannada
-                if lang.lang == 'kn':
-                    langdetect_confidence = lang.prob
-                    break
+            if detected_langs:
+                top = detected_langs[0]
+                if top.lang != 'en':
+                    # Non-English detection supports the Romanized Kannada hypothesis
+                    langdetect_boost = top.prob * 0.3
         except LangDetectException:
             pass
 
-        # Combine confidences (pattern matching is more reliable for romanized)
-        combined_confidence = (pattern_confidence * 0.7) + (langdetect_confidence * 0.3)
+        combined_confidence = min((pattern_confidence * 0.7) + langdetect_boost, 1.0)
 
-        # Consider it romanized Kannada if patterns match significantly
-        is_romanized = pattern_confidence > 0.2 or combined_confidence > 0.3
+        # Positive if even one Kannada indicator word was found (absolute count ≥ 1)
+        is_romanized = pattern_matches >= 1
 
         return is_romanized, combined_confidence
 
