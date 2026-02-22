@@ -1133,10 +1133,17 @@ def _render_batch_tab(backend: str) -> None:
     text_cols = df_input.columns.tolist()
 
     _guess_keywords = ("review", "text", "comment", "description", "feedback", "content")
+    # Prefer an exact column-name match first (e.g. "review" before "review_id")
     default_idx = next(
-        (i for i, c in enumerate(text_cols) if any(k in c.lower() for k in _guess_keywords)),
-        0,
+        (i for i, c in enumerate(text_cols) if c.lower() in _guess_keywords),
+        None,
     )
+    # Fall back to substring match only when no exact match is found
+    if default_idx is None:
+        default_idx = next(
+            (i for i, c in enumerate(text_cols) if any(k in c.lower() for k in _guess_keywords)),
+            0,
+        )
     selected_col = st.selectbox(
         "Select the column that contains the review text:",
         options=text_cols,
