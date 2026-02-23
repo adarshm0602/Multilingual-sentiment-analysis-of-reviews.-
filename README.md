@@ -8,20 +8,19 @@
 
 ## Table of Contents
 
-1. [Team Members](#team-members)
-2. [Problem Statement & Motivation](#problem-statement--motivation)
-3. [System Architecture](#system-architecture)
-4. [Installation](#installation)
-5. [Usage](#usage)
+1. [Problem Statement & Motivation](#problem-statement--motivation)
+2. [System Architecture](#system-architecture)
+3. [Installation](#installation)
+4. [Usage](#usage)
    - [Command-Line Pipeline](#command-line-pipeline)
    - [Batch Processing](#batch-processing)
    - [Web Application](#web-application)
    - [Evaluation Notebook](#evaluation-notebook)
-6. [Dataset](#dataset)
-7. [Model Performance](#model-performance)
-8. [Known Limitations](#known-limitations)
-9. [Future Work](#future-work)
-10. [References](#references)
+5. [Dataset](#dataset)
+6. [Model Performance](#model-performance)
+7. [Known Limitations](#known-limitations)
+8. [Future Work](#future-work)
+9. [References](#references)
 
 ---
 
@@ -70,32 +69,34 @@ INPUT TEXT
           │                 │                (or mixed/unknown)
           │          ┌──────┴──────┐               │
           │          ▼             │               │
-          │  ┌───────────────┐     │               │
-          │  │  Stage 2 ·    │     │               │
-          │  │ Transliterate │     │               │
-          │  │               │     │               │
-          │  │ IndicXlit     │     │               │
-          │  │ (ai4bharat)   │     │               │
-          │  │  + fallback   │     │               │
-          │  │  dictionary   │     │               │
-          │  │ (166 entries) │     │               │
-          │  └──────┬────────┘     │               │
+          │  ┌───────────────────┐ │               │
+          │  │  Stage 2 ·        │ │               │
+          │  │  Transliteration  │ │               │
+          │  │                   │ │               │
+          │  │  Tier 1: IndicXlit│ │               │
+          │  │  (ai4bharat) *    │ │               │
+          │  │  Tier 2: curated  │ │               │
+          │  │  dict (166 words) │ │               │
+          │  │  Tier 3: rule-    │ │               │
+          │  │  based ITRANS→    │ │               │
+          │  │  Kannada scheme   │ │               │
+          │  └──────┬────────────┘ │               │
           │         │ Kannada      │               │
           │         └──────────────┘               │
           │                 │                      │
           ├─────────────────┘                      │
           │                                        │
           ▼                                        │
-  ┌───────────────┐                                │
-  │  Stage 3 ·    │                                │
-  │  Translate    │                                │
-  │               │                                │
-  │ IndicTrans2   │                                │
-  │ (ai4bharat)   │                                │
-  │  or Google    │                                │
-  │  or fallback  │                                │
-  │  dictionary   │                                │
-  └──────┬────────┘                                │
+  ┌──────────────────────┐                         │
+  │  Stage 3 · Translate │                         │
+  │                      │                         │
+  │  NLLB-200 600M       │                         │
+  │  (default, offline)  │                         │
+  │  or IndicTrans2      │                         │
+  │  or MarianMT         │                         │
+  │  or Google Translate │                         │
+  │  or fallback dict    │                         │
+  └──────┬───────────────┘                         │
          │ English                                 │
          └─────────────────────────────────────────┤
                                                    │
@@ -114,13 +115,16 @@ INPUT TEXT
                                    └───────────────────────────┘
 ```
 
+> \* IndicXlit requires `fairseq`, which is incompatible with Python 3.11+.
+>   The pipeline automatically falls through to the dictionary and scheme tiers.
+
 ### Key Components
 
 | Component | Class | Description |
 |-----------|-------|-------------|
 | Language Detector | `LanguageDetector` | Unicode-block ratio + `langdetect`; returns `kannada_script`, `romanized_kannada`, `english`, `mixed`, or `unknown` |
-| Transliterator | `Transliterator` | IndicXlit neural model with 166-word fallback dictionary; Romanized → Kannada |
-| Translator | `Translator` | Three backends: IndicTrans2 (offline), Google Translate (online), fallback dictionary |
+| Transliterator | `Transliterator` | 3-tier: IndicXlit neural model → curated 166-word dict → rule-based ITRANS→Kannada (`indic-transliteration`); Romanized → Kannada |
+| Translator | `Translator` | 5 backends: NLLB-200 (default, offline), IndicTrans2 (offline, gated), MarianMT (offline), Google Translate (online), fallback dictionary |
 | Sentiment Classifier | `SentimentClassifier` | DistilBERT fine-tuned on Stanford SST-2; 3-class output (Positive / Negative / Neutral) |
 | Pipeline Orchestrator | `KannadaSentimentPipeline` | Routes text, times each stage, collects errors; supports single and batch inference |
 
@@ -132,8 +136,8 @@ INPUT TEXT
 
 - Python **3.10 – 3.12**
 - macOS, Linux, or WSL2 on Windows
-- ~4 GB disk space for model weights
-- 4 GB+ RAM (8 GB recommended for IndicTrans2)
+- ~1.5 GB disk space (DistilBERT ~270 MB + NLLB-200 ~600 MB + dependencies)
+- 4 GB+ RAM (8 GB recommended)
 
 ### 1 · Clone the repository
 
@@ -158,14 +162,24 @@ pip install -r requirements.txt
 
 > **Note on IndicXlit** — The `ai4bharat-transliteration` package requires
 > `fairseq`, which has compatibility issues on Python 3.11+.  The pipeline
-> automatically falls back to the built-in 166-word dictionary when the neural
-> model cannot be loaded; no manual intervention is needed.
+> automatically falls through to the built-in 166-word dictionary and then the
+> `indic-transliteration` rule-based scheme; no manual intervention is needed.
 
-### 4 · Download the local sentiment model *(first run only)*
+### 4 · First-run model downloads
 
-The DistilBERT-SST-2 model is downloaded automatically from HuggingFace on
-first use and cached in `data/models/distilbert-sst2/`.  It requires an internet
-connection for the initial download (~270 MB).
+Two models are downloaded automatically on first use and cached locally:
+
+| Model | Size | Cached at |
+|-------|------|-----------|
+| DistilBERT-SST-2 | ~270 MB | `data/models/distilbert-sst2/` |
+| NLLB-200 distilled 600M | ~600 MB | `~/.cache/huggingface/hub/` |
+
+Both downloads require an internet connection on first run only.  All subsequent
+runs are fully offline.
+
+> **Tip** — When you first open the **Batch Upload** tab, a spinner reads
+> *"Loading NLLB-200 600M…"*.  Wait for it to complete before clicking
+> **Process All** to avoid a silent multi-minute delay mid-batch.
 
 ### 5 · Verify the installation
 
@@ -184,28 +198,28 @@ Expected output: **212 passed** in under 15 seconds.
 ```python
 from src.pipeline import KannadaSentimentPipeline
 
-# Build with fallback translation (no internet needed)
+# Default: NLLB-200 offline translation (high quality, ~600 MB first download)
 pipeline = KannadaSentimentPipeline(
-    translation_backend="fallback",   # or "indictrans2" / "google"
-    use_transliteration_model=False,  # True requires IndicXlit
+    translation_backend="nllb",       # or "marian" / "google" / "fallback"
+    use_transliteration_model=False,  # True requires IndicXlit (Python ≤3.10)
     auto_fallback=True,
 )
 
-# Single review
+# Kannada script — translated by NLLB, then classified
 result = pipeline.process("ಈ ಉತ್ಪನ್ನ ತುಂಬಾ ಚೆನ್ನಾಗಿದೆ")
 print(result["sentiment_label"])      # Positive
 print(result["confidence_score"])     # 0.9998
 print(result["detected_language"])    # kannada_script
 print(result["translated_text"])      # This product is very good
-print(result["pipeline_steps"])       # ['detect', 'translate', 'classify']
-print(result["timings"])              # {'detect_s': 0.002, 'classify_s': 0.016, ...}
+print(result["pipeline_steps"])       # ['language_detection', 'translation', 'sentiment_classification']
+print(result["timings"])              # {'language_detection': 0.0001, 'translation': 5.2, ...}
 
-# Romanized Kannada
+# Romanized Kannada — transliterated then translated
 result = pipeline.process("tumba chennagide, olle product")
 print(result["sentiment_label"])      # Positive
 print(result["transliterated_text"]) # ತುಂಬ ಚೆನ್ನಾಗಿದೆ, ಒಳ್ಳೆ ಪ್ರಾಡಕ್ಟ್
 
-# English — routed directly to sentiment classifier
+# English — routed directly to sentiment classifier (no translation needed)
 result = pipeline.process("Terrible packaging, damaged on arrival.")
 print(result["sentiment_label"])      # Negative
 ```
@@ -216,7 +230,7 @@ print(result["sentiment_label"])      # Negative
 import pandas as pd
 from src.pipeline import KannadaSentimentPipeline
 
-pipeline = KannadaSentimentPipeline(translation_backend="fallback")
+pipeline = KannadaSentimentPipeline(translation_backend="nllb")
 
 # From a list of strings
 texts = [
@@ -264,21 +278,34 @@ venv/bin/streamlit run app/streamlit_app.py
 
 Then open **http://localhost:8501** in your browser.
 
+**Sidebar — Translation Engine**
+
+Choose from five backends:
+
+| Option | Description |
+|--------|-------------|
+| **NLLB-200 600M** *(default)* | Offline, free, high quality — Meta's NLLB model, ~600 MB |
+| IndicTrans2 | Offline, highest quality — AI4Bharat model, ~3 GB, gated access |
+| MarianMT | Offline, free, lower quality — Helsinki-NLP opus-mt-kn-en |
+| Google Translate | Online — requires `GOOGLE_TRANSLATE_API_KEY` environment variable |
+| Dictionary Fallback | Offline, instant — 166-entry vocabulary, lowest accuracy |
+
 **Single Review tab**
 
-1. Choose a translation backend in the sidebar (Fallback / IndicTrans2 / Google)
-2. Type or paste a review, or click a sample button
-3. Click **Analyze Sentiment**
-4. Results show: detected language, pipeline steps, sentiment badge, confidence
-   gauge, and transliteration/translation intermediate outputs
+1. Type or paste a review, or click a sample button (Kannada / Romanized / English)
+2. Click **Analyze Sentiment**
+3. Results show: detected language, pipeline steps, sentiment badge, confidence
+   gauge, transliteration card, and translation card
 
 **Batch Upload tab**
 
-1. Click **Load Demo Data** to load the built-in 20-review CSV, **or**
-2. Upload your own `.csv` / `.xlsx` file
-3. Select the column containing review text
-4. Click **Process All Reviews** — a progress bar tracks per-review status
-5. View the results table; download as CSV with the **Download Results** button
+1. Click **Load Demo Data** to use the built-in 20-review CSV, **or** upload your
+   own `.csv` / `.xlsx` file
+2. Select the column containing review text
+3. Click **Process All** — a live progress bar shows per-review status
+4. View the **Summary Dashboard** (sentiment pie chart, language bar chart,
+   confidence histogram) and the coloured **Full Results Table**
+5. Download all results as CSV with the **Download** button
 
 ### Evaluation Notebook
 
@@ -335,9 +362,11 @@ language types and sentiment classes.
 
 | Model | Source | Purpose |
 |-------|--------|---------|
-| `distilbert-base-uncased-finetuned-sst-2-english` | HuggingFace / Hugging Face Hub | Sentiment classification |
-| `ai4bharat/IndicXlit` | AI4Bharat | Romanized Kannada → Kannada transliteration |
-| `ai4bharat/IndicTrans2` | AI4Bharat | Kannada → English translation |
+| `distilbert-base-uncased-finetuned-sst-2-english` | HuggingFace Hub | Sentiment classification |
+| `facebook/nllb-200-distilled-600M` | Meta AI / HuggingFace Hub | Kannada → English translation (default) |
+| `ai4bharat/IndicXlit` | AI4Bharat | Romanized Kannada → Kannada transliteration (neural tier) |
+| `indic-transliteration` | Sanskrit Computational Linguistics | Rule-based ITRANS → Kannada script (fallback tier) |
+| `ai4bharat/IndicTrans2` | AI4Bharat | Kannada → English translation (optional, high quality) |
 | langdetect 1.0.9 | Google Language Detection | Language identification signal |
 
 > All models run **locally** on CPU — no inference API calls are made at runtime.
@@ -347,9 +376,11 @@ language types and sentiment classes.
 ## Model Performance
 
 > Evaluation conducted on the 50-review hand-labeled dataset using the
-> **fallback translation backend** (dictionary-based; no IndicTrans2 required).
-> Results reflect the end-to-end pipeline including language detection, transliteration,
-> translation, and sentiment classification.
+> **fallback translation backend** (dictionary-based; no neural translation).
+> Results reflect the end-to-end pipeline including language detection,
+> transliteration, translation, and sentiment classification.
+> Switching to the NLLB-200 backend is expected to raise Kannada-script accuracy
+> significantly by replacing the 166-word fallback dictionary with full neural MT.
 
 ### Overall Accuracy
 
@@ -366,6 +397,10 @@ language types and sentiment classes.
 | Kannada Script | 20 | 15 | **75.0%** | 94.5% | 111.5 ms |
 | Romanized Kannada | 15 | 8 | **53.3%** | 98.4% | 41.0 ms |
 | English | 15 | 14 | **93.3%** | 99.98% | 20.4 ms |
+
+> With the NLLB-200 backend the average latency for Kannada-script reviews rises to
+> ~5 s per review (neural translation), but translation quality improves substantially
+> compared to the fallback dictionary.
 
 ### Per-Class Metrics
 
@@ -400,24 +435,14 @@ negative ones, likely due to imperfect fallback translation.
 
 ### Processing Latency (end-to-end, per review)
 
-| Statistic | Value |
-|-----------|-------|
-| Mean | 63.0 ms |
-| Median | 20.7 ms |
-| Min | 17.2 ms |
-| Max | 1862.5 ms (model cold-start) |
+| Backend | Mean | Median | Min | Max |
+|---------|------|--------|-----|-----|
+| Fallback dict | 63 ms | 21 ms | 17 ms | 1863 ms (cold-start) |
+| NLLB-200 | ~4.2 s | ~5 s | ~18 ms (English) | ~6 s |
 
-Individual stage breakdown (mean):
-
-| Stage | Mean Latency |
-|-------|-------------|
-| Language Detection | 7.2 ms |
-| Transliteration | < 1 ms (fallback dict) |
-| Translation | < 1 ms (fallback dict) |
-| Sentiment Classification | 54.1 ms |
-
-> The 1.86 s maximum is the **one-time model warm-up** on first call; all subsequent
-> calls run in 15–30 ms on an Apple M-series CPU.
+> The 1.86 s maximum for the fallback backend is the **one-time model warm-up**
+> on first call.  NLLB-200 translates each Kannada/Romanized review in ~5 s;
+> English reviews bypass translation and run in ~20 ms regardless of backend.
 
 ---
 
@@ -434,21 +459,22 @@ Individual stage breakdown (mean):
    Negative).  Neutral is inferred from low-confidence borderline outputs, but the
    evaluation set has only 2 neutral examples — making this class unreliable.
 
-3. **Fallback translation has limited vocabulary (166 entries)**
-   When IndicTrans2 is not loaded, Kannada words not in the fallback dictionary
-   pass through untranslated.  This degrades sentiment accuracy for Kannada-script
-   input significantly (would be much higher with IndicTrans2 active).
-
-4. **No native Kannada sentiment model**
+3. **No native Kannada sentiment model**
    The pipeline translates Kannada → English and then applies an English-only
    sentiment model.  Translation errors propagate to the final label.  A model
    fine-tuned directly on Kannada or a multilingual model (IndicBERT, MuRIL) would
    eliminate this source of error.
 
-5. **IndicXlit incompatibility with Python 3.11+**
+4. **IndicXlit incompatibility with Python 3.11+**
    The `fairseq` dependency required by IndicXlit does not support Python 3.11+.
-   The neural transliteration model is therefore unavailable in this environment;
-   the system falls back to the dictionary automatically.
+   The neural transliteration tier is therefore unavailable; the system falls back
+   to the curated 166-word dictionary and then the `indic-transliteration` rule-based
+   scheme automatically.
+
+5. **ITRANS rule-based transliteration is imperfect for colloquial words**
+   The `indic-transliteration` scheme assumes standard ITRANS encoding.  Informal
+   Kanglish spellings (e.g. *"tumba"* vs. ITRANS *"tumba"*) may produce unexpected
+   Unicode output.  The curated dictionary takes priority for known loanwords.
 
 6. **Small evaluation set (50 reviews)**
    Performance estimates carry wide confidence intervals.  Results should be
@@ -458,6 +484,11 @@ Individual stage breakdown (mean):
    `process_batch()` automatically falls back to `ThreadPoolExecutor` when called
    from an interactive session (Jupyter / IPython) due to macOS `spawn` context
    restrictions.
+
+8. **NLLB-200 latency (~5 s/review)**
+   Running on CPU, NLLB-200 takes ~5 seconds per Kannada review.  A 20-review
+   demo batch completes in roughly 90 seconds.  GPU acceleration would reduce this
+   to under 0.5 s/review.
 
 ---
 
@@ -477,9 +508,8 @@ Individual stage breakdown (mean):
 - **Neutral class**: Collect sufficient neutral examples and fine-tune a 3-class
   sentiment head to handle ambiguous reviews properly.
 
-- **IndicTrans2 integration**: Resolve the `sentencepiece` / `ctranslate2` version
-  constraints so the full IndicTrans2 translation model can be loaded, improving
-  Kannada-script accuracy.
+- **GPU acceleration**: Add `device="cuda"` support for NLLB-200 and DistilBERT to
+  reduce per-review latency from ~5 s to under 0.5 s.
 
 - **REST API**: Expose the pipeline as a FastAPI service so it can be integrated
   into e-commerce backends without requiring Python client code.
@@ -498,13 +528,15 @@ Individual stage breakdown (mean):
 
 ```
 .
+├── .streamlit/
+│   └── config.toml               # Streamlit server config (runOnSave=false, etc.)
 ├── app/
-│   └── streamlit_app.py          # Streamlit web application (864 lines)
-├── config.yaml                   # Global configuration
+│   └── streamlit_app.py          # Streamlit web application
+├── config.yaml                   # Global configuration (default backend: nllb)
 ├── data/
 │   ├── demo_data.csv             # 20-review labelled demo dataset
 │   ├── models/
-│   │   └── distilbert-sst2/     # Cached DistilBERT sentiment model
+│   │   └── distilbert-sst2/     # Cached DistilBERT sentiment model (~270 MB)
 │   └── processed/
 │       ├── evaluation_results.json  # Full pipeline evaluation (50 reviews)
 │       └── translation_quality.csv  # Translation quality scores
@@ -520,8 +552,8 @@ Individual stage breakdown (mean):
 │   ├── pipeline.py                   # KannadaSentimentPipeline orchestrator
 │   ├── preprocessing/
 │   │   ├── language_detector.py      # LanguageDetector + DetectionResult
-│   │   ├── translator.py             # Translator (3 backends) + TranslationResult
-│   │   └── transliterator.py         # Transliterator + TransliterationResult
+│   │   ├── translator.py             # Translator (5 backends) + TranslationResult
+│   │   └── transliterator.py         # Transliterator (3-tier) + TransliterationResult
 │   └── utils/
 └── tests/
     ├── conftest.py               # Shared fixtures and helpers
@@ -541,51 +573,61 @@ Individual stage breakdown (mean):
    *DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter.*
    arXiv:1910.01108. HuggingFace model: `distilbert-base-uncased-finetuned-sst-2-english`.
 
-2. **IndicXlit**
+2. **NLLB-200**
+   NLLB Team, Costa-jussà, M. R., Cross, J., Çelebi, O., et al. (2022).
+   *No Language Left Behind: Scaling Human-Centered Machine Translation.*
+   arXiv:2207.04672. Meta AI. HuggingFace model: `facebook/nllb-200-distilled-600M`.
+
+3. **IndicXlit**
    Madhani, Y., Parthan, S., Bedekar, P., Khapra, M. M., et al. (2022).
    *Aksharantar: Advancing Romanization for South Asian Languages.*
    arXiv:2205.03018. AI4Bharat.
 
-3. **IndicTrans2**
+4. **indic-transliteration**
+   Vishvas Vasuki (2019–2024).
+   *indic_transliteration — Transliteration of Indic scripts.*
+   PyPI: `indic-transliteration`. https://github.com/indic-transliteration/indic_transliteration_py
+
+5. **IndicTrans2**
    Gala, J., Chitale, P. A., AK, R., Raghavan, V., Doddapaneni, S.,
    Kumar, A., … & Khapra, M. M. (2023).
    *IndicTrans2: Towards High-Quality and Accessible Machine Translation Models
    for all 22 Scheduled Indian Languages.*
    arXiv:2305.16307. AI4Bharat.
 
-4. **langdetect**
+6. **langdetect**
    Nakatani, S. (2010). *langdetect* — Language detection library ported from
    Google's language-detection library.  PyPI: `langdetect`.
 
-5. **Indic NLP Library**
+7. **Indic NLP Library**
    Kunchukuttan, A. (2020).
    *The IndicNLP Library.* AI4Bharat.
    https://github.com/anoopkunchukuttan/indic_nlp_library
 
 ### Datasets & Benchmarks
 
-6. **Stanford Sentiment Treebank (SST-2)**
+8. **Stanford Sentiment Treebank (SST-2)**
    Socher, R., Perelygin, A., Wu, J., Chuang, J., Manning, C. D., Ng, A., &
    Potts, C. (2013).
    *Recursive Deep Models for Semantic Compositionality Over a Sentiment Treebank.*
    EMNLP 2013.
 
-7. **AI4Bharat Indic NLP Datasets**
+9. **AI4Bharat Indic NLP Datasets**
    AI4Bharat (2022). *IndicNLP Catalog* — resources for Indian languages.
    https://github.com/AI4Bharat/indicnlp_catalog
 
 ### Frameworks
 
-8. **Hugging Face Transformers**
-   Wolf, T., Debut, L., Sanh, V., et al. (2020).
-   *Transformers: State-of-the-Art Natural Language Processing.*
-   EMNLP 2020 (Systems Demonstrations). arXiv:1910.03771.
+10. **Hugging Face Transformers**
+    Wolf, T., Debut, L., Sanh, V., et al. (2020).
+    *Transformers: State-of-the-Art Natural Language Processing.*
+    EMNLP 2020 (Systems Demonstrations). arXiv:1910.03771.
 
-9. **Streamlit**
-   Streamlit Inc. (2019–2024). *Streamlit — The fastest way to build data apps.*
-   https://streamlit.io
+11. **Streamlit**
+    Streamlit Inc. (2019–2024). *Streamlit — The fastest way to build data apps.*
+    https://streamlit.io
 
-10. **PyTorch**
+12. **PyTorch**
     Paszke, A., Gross, S., Massa, F., et al. (2019).
     *PyTorch: An Imperative Style, High-Performance Deep Learning Library.*
     NeurIPS 2019. arXiv:1912.01703.
@@ -596,4 +638,4 @@ Individual stage breakdown (mean):
 
 This project is developed for academic purposes as part of a university final project.
 All pre-trained model weights are used subject to their respective licenses
-(Apache 2.0 for DistilBERT / Transformers; MIT/CC for AI4Bharat models).
+(Apache 2.0 for DistilBERT / Transformers; CC-BY-NC for NLLB-200; MIT/CC for AI4Bharat models).
