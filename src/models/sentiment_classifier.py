@@ -340,8 +340,11 @@ class SentimentClassifier:
         # STEP 2: Load tokenizer
         # The tokenizer converts text to token IDs that the model understands
         # =====================================================================
+        # When loading from a local path, skip all network calls
+        load_kwargs = {"local_files_only": True} if self.model_path else {}
+
         logger.info("Loading tokenizer...")
-        self._tokenizer = self._AutoTokenizer.from_pretrained(model_source)
+        self._tokenizer = self._AutoTokenizer.from_pretrained(model_source, **load_kwargs)
 
         # =====================================================================
         # STEP 3: Load model
@@ -349,7 +352,7 @@ class SentimentClassifier:
         # classification head on top of the base transformer
         # =====================================================================
         logger.info("Loading model...")
-        self._model = self._AutoModel.from_pretrained(model_source)
+        self._model = self._AutoModel.from_pretrained(model_source, **load_kwargs)
 
         # =====================================================================
         # STEP 4: Move model to device and set to evaluation mode

@@ -24,8 +24,9 @@ models:
     name: "ai4bharat/IndicTrans2"
     source_lang: "kan_Knda"
     target_lang: "eng_Latn"
-    # Backend options: "indictrans2" (offline), "google" (online, needs API key), "fallback" (dictionary)
-    backend: "indictrans2"
+    # Backend options: "indictrans2" (offline, gated), "nllb" (offline, free, ~600MB, high quality),
+    #                  "marian" (offline, free, lower quality), "google" (online, needs API key), "fallback" (dictionary)
+    backend: "nllb"
     # Set to true to automatically fall back to simpler backends on failure
     auto_fallback: true
     # Maximum characters per segment for long text translation

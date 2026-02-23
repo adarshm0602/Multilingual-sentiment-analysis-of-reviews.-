@@ -75,6 +75,8 @@ logger = logging.getLogger(__name__)
 class TranslationBackend(Enum):
     """Enum for available translation backends."""
     INDICTRANS2 = "indictrans2"
+    NLLB = "nllb"
+    MARIAN = "marian"
     GOOGLE = "google"
     FALLBACK = "fallback"
 
@@ -424,6 +426,210 @@ class GoogleTranslator(BaseTranslator):
             raise TranslationError("Unexpected API response format.")
 
 
+class MarianTranslator(BaseTranslator):
+    """
+    Translator using Helsinki-NLP's opus-mt-kn-en MarianMT model.
+
+    Free, open, non-gated model (~300 MB) trained specifically for
+    Kannada→English translation.  Requires only ``transformers`` and
+    ``sentencepiece`` — no API key or special access needed.
+
+    Model: ``Helsinki-NLP/opus-mt-kn-en``
+    """
+
+    MODEL_NAME = "Helsinki-NLP/opus-mt-kn-en"
+
+    def __init__(self, allow_download: bool = True):
+        """Initialize the MarianMT translator.
+
+        Args:
+            allow_download: If False, only load from local cache; never
+                trigger a network download.  Use False for auto-fallback
+                to avoid blocking startup on a large download.
+        """
+        self._model = None
+        self._tokenizer = None
+        self._available = False
+        self._allow_download = allow_download
+        self._initialize()
+
+    def _initialize(self):
+        """Load the MarianMT model and tokenizer.
+
+        Tries the local HuggingFace cache first.  Falls back to a network
+        download only when ``allow_download=True``.
+        """
+        try:
+            from transformers import MarianMTModel, MarianTokenizer
+
+            logger.info(f"Loading MarianMT model: {self.MODEL_NAME}")
+            try:
+                self._tokenizer = MarianTokenizer.from_pretrained(
+                    self.MODEL_NAME, local_files_only=True
+                )
+                self._model = MarianMTModel.from_pretrained(
+                    self.MODEL_NAME, local_files_only=True
+                )
+            except Exception:
+                if not self._allow_download:
+                    logger.info(
+                        "MarianMT not in local cache; select 'marian' backend to download."
+                    )
+                    self._available = False
+                    return
+                logger.info("Downloading MarianMT (~300 MB)...")
+                self._tokenizer = MarianTokenizer.from_pretrained(self.MODEL_NAME)
+                self._model = MarianMTModel.from_pretrained(self.MODEL_NAME)
+
+            self._available = True
+            logger.info("MarianMT model loaded successfully.")
+
+        except ImportError as e:
+            logger.warning(f"transformers/sentencepiece not available: {e}")
+            self._available = False
+        except Exception as e:
+            logger.warning(f"Failed to load MarianMT model: {e}")
+            self._available = False
+
+    def is_available(self) -> bool:
+        """Return True if the MarianMT model loaded successfully."""
+        return self._available
+
+    @retry_with_backoff(max_retries=2, base_delay=0.5)
+    def translate(self, text: str) -> str:
+        """Translate Kannada text to English using MarianMT.
+
+        Args:
+            text: Kannada text to translate.
+
+        Returns:
+            English translation.
+
+        Raises:
+            TranslationError: If translation fails.
+        """
+        if not self._available:
+            raise TranslationError("MarianMT model not available.")
+
+        try:
+            inputs = self._tokenizer(
+                text,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
+            )
+            outputs = self._model.generate(**inputs, num_beams=4, early_stopping=True)
+            translated = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
+            return translated.strip()
+
+        except Exception as e:
+            raise TranslationError(f"MarianMT translation failed: {e}")
+
+
+class NLLBTranslator(BaseTranslator):
+    """
+    Translator using Meta's NLLB-200 distilled 600M model.
+
+    Free, non-gated model (~600 MB) with high-quality support for
+    Kannada→English translation.  Requires only ``transformers`` — no
+    fairseq dependency, no API key.
+
+    Model: ``facebook/nllb-200-distilled-600M``
+    """
+
+    MODEL_NAME = "facebook/nllb-200-distilled-600M"
+    SRC_LANG = "kan_Knda"
+    TGT_LANG = "eng_Latn"
+
+    def __init__(self, allow_download: bool = True):
+        """Initialize the NLLB-200 translator.
+
+        Args:
+            allow_download: If False, only load from local cache; never
+                trigger a network download.  Use False for auto-fallback
+                to avoid blocking startup on a large download.
+        """
+        self._model = None
+        self._tokenizer = None
+        self._tgt_lang_id = None
+        self._available = False
+        self._allow_download = allow_download
+        self._initialize()
+
+    def _initialize(self):
+        """Load the NLLB-200 model and tokenizer.
+
+        Tries the local HuggingFace cache first.  Falls back to a network
+        download only when ``allow_download=True``.
+        """
+        try:
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+            logger.info(f"Loading NLLB-200: {self.MODEL_NAME}")
+            try:
+                self._tokenizer = AutoTokenizer.from_pretrained(
+                    self.MODEL_NAME, src_lang=self.SRC_LANG, local_files_only=True
+                )
+                self._model = AutoModelForSeq2SeqLM.from_pretrained(
+                    self.MODEL_NAME, local_files_only=True
+                )
+            except Exception:
+                if not self._allow_download:
+                    logger.info(
+                        "NLLB-200 not in local cache; select 'nllb' backend to download."
+                    )
+                    self._available = False
+                    return
+                logger.info("Downloading NLLB-200 (~600 MB)...")
+                self._tokenizer = AutoTokenizer.from_pretrained(
+                    self.MODEL_NAME, src_lang=self.SRC_LANG
+                )
+                self._model = AutoModelForSeq2SeqLM.from_pretrained(self.MODEL_NAME)
+
+            self._tgt_lang_id = self._tokenizer.convert_tokens_to_ids(self.TGT_LANG)
+            self._available = True
+            logger.info("NLLB-200 loaded successfully.")
+        except ImportError as e:
+            logger.warning(f"transformers not available: {e}")
+            self._available = False
+        except Exception as e:
+            logger.warning(f"Failed to load NLLB-200: {e}")
+            self._available = False
+
+    def is_available(self) -> bool:
+        """Return True if the NLLB-200 model loaded successfully."""
+        return self._available
+
+    @retry_with_backoff(max_retries=2, base_delay=0.5)
+    def translate(self, text: str) -> str:
+        """Translate Kannada text to English using NLLB-200.
+
+        Args:
+            text: Kannada text to translate.
+
+        Returns:
+            English translation.
+
+        Raises:
+            TranslationError: If translation fails.
+        """
+        if not self._available:
+            raise TranslationError("NLLB-200 not available.")
+        try:
+            inputs = self._tokenizer(
+                text, return_tensors="pt", padding=True,
+                truncation=True, max_length=512,
+            )
+            outputs = self._model.generate(
+                **inputs,
+                forced_bos_token_id=self._tgt_lang_id,
+                max_length=512, num_beams=4, early_stopping=True,
+            )
+            return self._tokenizer.batch_decode(outputs, skip_special_tokens=True)[0].strip()
+        except Exception as e:
+            raise TranslationError(f"NLLB-200 translation failed: {e}")
+
+
 class FallbackTranslator(BaseTranslator):
     """Dictionary-based Kannada→English translator.
 
@@ -621,12 +827,28 @@ class Translator:
         # Always initialize fallback
         self._translators[TranslationBackend.FALLBACK] = FallbackTranslator()
 
-        # Initialize IndicTrans2 if requested
-        if self.backend == TranslationBackend.INDICTRANS2 or self.auto_fallback:
+        # IndicTrans2: only when explicitly requested (~3 GB, broken on Python 3.11+)
+        if self.backend == TranslationBackend.INDICTRANS2:
             try:
                 self._translators[TranslationBackend.INDICTRANS2] = IndicTrans2Translator()
             except Exception as e:
                 logger.warning(f"Failed to initialize IndicTrans2: {e}")
+
+        # NLLB: download only when explicitly selected; cache-only for auto_fallback
+        if self.backend == TranslationBackend.NLLB or self.auto_fallback:
+            try:
+                allow = self.backend == TranslationBackend.NLLB
+                self._translators[TranslationBackend.NLLB] = NLLBTranslator(allow_download=allow)
+            except Exception as e:
+                logger.warning(f"Failed to initialize NLLB-200: {e}")
+
+        # MarianMT: download only when explicitly selected; cache-only for auto_fallback
+        if self.backend == TranslationBackend.MARIAN or self.auto_fallback:
+            try:
+                allow = self.backend == TranslationBackend.MARIAN
+                self._translators[TranslationBackend.MARIAN] = MarianTranslator(allow_download=allow)
+            except Exception as e:
+                logger.warning(f"Failed to initialize MarianMT: {e}")
 
         # Initialize Google Translate if requested
         if self.backend == TranslationBackend.GOOGLE or self.auto_fallback:
@@ -661,6 +883,18 @@ class Translator:
                 if self._translators[TranslationBackend.INDICTRANS2].is_available():
                     logger.info("Falling back to IndicTrans2")
                     return TranslationBackend.INDICTRANS2
+
+            # Try NLLB-200 (better quality than MarianMT, no fairseq dep)
+            if TranslationBackend.NLLB in self._translators:
+                if self._translators[TranslationBackend.NLLB].is_available():
+                    logger.info("Falling back to NLLB-200")
+                    return TranslationBackend.NLLB
+
+            # Try MarianMT
+            if TranslationBackend.MARIAN in self._translators:
+                if self._translators[TranslationBackend.MARIAN].is_available():
+                    logger.info("Falling back to MarianMT")
+                    return TranslationBackend.MARIAN
 
             # Try Google
             if TranslationBackend.GOOGLE in self._translators:

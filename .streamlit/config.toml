@@ -1,0 +1,13 @@
+[server]
+# Prevent hot-reload from restarting the server mid-session (especially
+# during long batch runs) which would cause "Cannot load frontend code".
+runOnSave = false
+headless = true
+maxUploadSize = 200
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+# Faster re-runs improve UI responsiveness between progress updates.
+fastReruns = true

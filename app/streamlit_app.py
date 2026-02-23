@@ -8,6 +8,7 @@ Run from the project root:
 import io
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -346,6 +347,8 @@ _STEP_ICONS: Dict[str, str] = {
 
 _BACKEND_LABELS: Dict[str, str] = {
     "indictrans2": "IndicTrans2 (offline, best quality)",
+    "nllb":        "NLLB-200 600M (offline, free, high quality)",
+    "marian":      "MarianMT opus-mt-kn-en (offline, free)",
     "google":      "Google Translate (online, needs API key)",
     "fallback":    "Dictionary Fallback (offline, fast)",
 }
@@ -371,10 +374,17 @@ _DEMO_CSV_PATH = _ROOT / "data" / "demo_data.csv"
 def _load_pipeline(translation_backend: str):
     """Initialize the pipeline once per backend selection (cached per backend)."""
     from src.pipeline import KannadaSentimentPipeline
+    from pathlib import Path
+
+    # Use locally cached distilbert model to avoid SSL/network calls at runtime
+    local_model = Path(__file__).parent.parent / "data" / "models" / "distilbert-sst2"
+    classifier_path = str(local_model) if local_model.exists() else None
+
     return KannadaSentimentPipeline(
         translation_backend=translation_backend,
         use_transliteration_model=True,
         auto_fallback=True,
+        classifier_model_path=classifier_path,
     )
 
 
@@ -432,9 +442,11 @@ def _render_sidebar() -> str:
             "Translation Engine",
             options=list(_BACKEND_LABELS.keys()),
             format_func=lambda x: _BACKEND_LABELS[x],
-            index=0,
+            index=list(_BACKEND_LABELS.keys()).index("nllb"),
             help=(
-                "IndicTrans2 — high-quality offline model (slow first load).\n"
+                "IndicTrans2 — highest quality offline model (gated, slow first load).\n"
+                "NLLB-200 — free offline model, high quality, ~600 MB download.\n"
+                "MarianMT — free offline model, lower quality, no API key needed.\n"
                 "Google — cloud API, requires GOOGLE_TRANSLATE_API_KEY.\n"
                 "Fallback — fast dictionary lookup, lower accuracy."
             ),
@@ -715,6 +727,11 @@ def _run_batch_with_progress(pipeline, texts: List[Any]) -> pd.DataFrame:
                 f'⚠️ Item {done}: {s_stat}</div>',
                 unsafe_allow_html=True,
             )
+
+        # Yield briefly so Tornado's event loop can flush pending HTTP
+        # responses (static files, WebSocket frames) and keep the browser
+        # from dropping the connection during heavy NLLB inference.
+        time.sleep(0.05)
 
     progress_bar.progress(1.0, text=f"✅ Done — {n} reviews processed.")
     status_slot.empty()
@@ -1027,6 +1044,17 @@ def _render_single_tab(backend: str) -> None:
 def _render_batch_tab(backend: str) -> None:
     """Content for the Batch Upload tab."""
 
+    # ── Pre-warm the pipeline ──────────────────────────────────────────────────
+    # Load the translation model the first time this tab is visited (per backend)
+    # so it is already in the cache when the user clicks "Process All".
+    # This prevents a silent 4-minute block mid-batch that kills the WebSocket.
+    _prewarm_key = f"_pipeline_ready_{backend}"
+    if not st.session_state.get(_prewarm_key):
+        _label = _BACKEND_LABELS.get(backend, backend)
+        with st.spinner(f"Loading {_label} — this may take a minute on first run…"):
+            _load_pipeline(backend)
+        st.session_state[_prewarm_key] = True
+
     # ── Session-state initialisation ──────────────────────────────────────────
     if "batch_uploader_key" not in st.session_state:
         st.session_state["batch_uploader_key"] = 0
@@ -1190,9 +1218,8 @@ def _render_batch_tab(backend: str) -> None:
     if process_clicked:
         texts = reviews_series.iloc[:process_n].tolist()
         try:
-            pipeline = _load_pipeline(backend)
             with st.spinner("Initializing models…"):
-                pass
+                pipeline = _load_pipeline(backend)
 
             st.markdown(
                 '<p class="section-label" style="margin-top:1rem;">Processing Progress</p>',
@@ -1249,8 +1276,8 @@ def _render_batch_tab(backend: str) -> None:
 
     styled = (
         display_df.style
-        .applymap(_color_sentiment, subset=["sentiment_label"])
-        .applymap(_color_status,    subset=["status"])
+        .map(_color_sentiment, subset=["sentiment_label"])
+        .map(_color_status,    subset=["status"])
         .format({"confidence_score": "{:.1%}", "processing_time_s": "{:.3f}s"})
     )
     st.dataframe(styled, use_container_width=True, height=380)

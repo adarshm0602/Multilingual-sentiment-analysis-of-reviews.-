@@ -342,6 +342,9 @@ class Transliterator:
         if self.use_model:
             self._initialize_model()
 
+        self._scheme_available = False
+        self._initialize_scheme()
+
     def _initialize_model(self) -> None:
         """
         Initialize the IndicXlit model.
@@ -378,6 +381,37 @@ class Transliterator:
             else:
                 logger.warning(f"Failed to load IndicXlit model: {e}. Using fallback.")
             self._model_available = False
+
+    def _initialize_scheme(self) -> None:
+        try:
+            from indic_transliteration import sanscript
+            _ = sanscript.ITRANS
+            _ = sanscript.KANNADA
+            self._scheme_available = True
+            logger.info("indic-transliteration (scheme converter) loaded successfully.")
+        except ImportError:
+            logger.warning(
+                "indic-transliteration not installed. "
+                "Install with: pip install indic-transliteration"
+            )
+        except Exception as e:
+            logger.warning(f"indic-transliteration init failed: {e}")
+
+    def _transliterate_with_scheme(self, word: str) -> Optional[str]:
+        if not self._scheme_available:
+            return None
+        try:
+            from indic_transliteration import sanscript
+            result = sanscript.transliterate(word, sanscript.ITRANS, sanscript.KANNADA)
+            # Reject if unchanged (no ITRANS patterns found) or still pure ASCII
+            if not result or result.strip() == word:
+                return None
+            if all(ord(c) < 128 for c in result):
+                return None
+            return result
+        except Exception as e:
+            logger.debug(f"Scheme transliteration failed for '{word}': {e}")
+            return None
 
     def _transliterate_with_model(self, word: str) -> Optional[str]:
         """
@@ -456,10 +490,16 @@ class Transliterator:
             if result:
                 return result, "model"
 
-        # Try fallback dictionary
+        # Try curated fallback dictionary first (hand-tuned, covers loanwords)
         result = self._transliterate_with_fallback(word)
         if result:
             return result, "fallback"
+
+        # Try rule-based scheme conversion for words not in the dictionary
+        if self._scheme_available:
+            result = self._transliterate_with_scheme(word)
+            if result:
+                return result, "scheme"
 
         # Return original if no transliteration found
         logger.debug(f"No transliteration found for: '{word}'")
@@ -524,10 +564,14 @@ class Transliterator:
                 methods_used.add(method)
 
         # Determine overall method
-        if "model" in methods_used and "fallback" in methods_used:
+        if "model" in methods_used and len(methods_used) > 1:
             overall_method = "mixed"
         elif "model" in methods_used:
             overall_method = "model"
+        elif "scheme" in methods_used and "fallback" in methods_used:
+            overall_method = "mixed"
+        elif "scheme" in methods_used:
+            overall_method = "scheme"
         elif "fallback" in methods_used:
             overall_method = "fallback"
         else:
@@ -639,6 +683,7 @@ class Transliterator:
         """
         return {
             "model_available": self._model_available,
+            "scheme_available": self._scheme_available,
             "fallback_dict_size": len(self.fallback_dict),
             "beam_width": self.beam_width,
             "use_model": self.use_model,
