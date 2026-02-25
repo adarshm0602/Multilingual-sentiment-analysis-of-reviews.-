@@ -5,8 +5,7 @@ streamlit==1.31.0
 transformers==4.37.2
 sentencepiece==0.2.1
 sacremoses
---extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.2.0+cpu
+torch==2.2.0
 
 # Language Detection
 langdetect==1.0.9
