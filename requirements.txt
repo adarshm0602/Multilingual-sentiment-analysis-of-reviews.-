@@ -1,36 +1,37 @@
 # Web Application
-streamlit==1.31.0
+streamlit>=1.31.0
 
 # Deep Learning & Transformers
-transformers==4.37.2
-sentencepiece==0.2.1
+transformers>=4.37.2
+sentencepiece
 sacremoses
-torch==2.2.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 
 # Language Detection
-langdetect==1.0.9
+langdetect
 
 # Indic Language Processing
-indic-nlp-library==0.92
+indic-nlp-library
 # ai4bharat-transliteration excluded — fairseq build fails on cloud; app auto-falls back to dict
-indic-transliteration        # rule-based ITRANS→Kannada; Python 3.11+ compatible
+indic-transliteration
 
 # Data Processing
-pandas==2.2.0
-numpy==1.26.3
+pandas
+numpy
 
 # Machine Learning
-scikit-learn==1.4.0
+scikit-learn
 
 # Visualization
-plotly==5.18.0
+plotly
 
 # Configuration
-pyyaml==6.0.1
+pyyaml
 
 # Additional dependencies for Indic NLP
-morfessor==2.0.6
+morfessor
 
 # Utilities
-tqdm==4.66.1
-requests==2.31.0
+tqdm
+requests
