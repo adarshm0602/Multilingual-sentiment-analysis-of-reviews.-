@@ -5,7 +5,7 @@ Run from the project root:
     venv/bin/streamlit run app/streamlit_app.py
 """
 
-import io
+import html
 import logging
 import sys
 import time
@@ -289,8 +289,6 @@ st.markdown(f"<style>{_CSS}</style>", unsafe_allow_html=True)
 
 TEAM_MEMBERS = [
     ("🎓", "Adarsh M"),
-    ("🎓", "Team Member 2"),   # ← edit
-    ("🎓", "Team Member 3"),   # ← edit
 ]
 
 SAMPLE_REVIEWS = [
@@ -564,7 +562,7 @@ def _render_intermediates(result: Dict[str, Any]) -> None:
             st.markdown(
                 f'<div class="output-card"><div class="output-card-label">'
                 f'🔤 Transliterated (Romanized → Kannada script)</div>'
-                f'<div class="output-card-value">{tlit}</div></div>',
+                f'<div class="output-card-value">{html.escape(str(tlit))}</div></div>',
                 unsafe_allow_html=True,
             )
         else:
@@ -580,7 +578,7 @@ def _render_intermediates(result: Dict[str, Any]) -> None:
             st.markdown(
                 f'<div class="output-card"><div class="output-card-label">'
                 f'🌐 Translated to English</div>'
-                f'<div class="output-card-value">{tran}</div></div>',
+                f'<div class="output-card-value">{html.escape(str(tran))}</div></div>',
                 unsafe_allow_html=True,
             )
         else:
@@ -793,7 +791,7 @@ def _render_summary_dashboard(df: pd.DataFrame) -> None:
         )
         # pandas ≥ 2.0 renames the column; handle both
         if "index" in sent_counts.columns:
-            sent_counts = sent_counts.rename(columns={"index": "Sentiment", "sentiment_label": "Count"})
+            sent_counts = sent_counts.rename(columns={"index": "Sentiment", "count": "Count"})
 
         fig_pie = px.pie(
             sent_counts,
@@ -833,7 +831,7 @@ def _render_summary_dashboard(df: pd.DataFrame) -> None:
             .rename(columns={"detected_language": "Language", "count": "Count"})
         )
         if "index" in lang_counts.columns:
-            lang_counts = lang_counts.rename(columns={"index": "Language", "detected_language": "Count"})
+            lang_counts = lang_counts.rename(columns={"index": "Language", "count": "Count"})
 
         fig_lang = px.bar(
             lang_counts,

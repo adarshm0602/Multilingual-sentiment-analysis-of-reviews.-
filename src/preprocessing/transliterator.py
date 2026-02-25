@@ -52,7 +52,7 @@ Example
 
 import re
 import logging
-from typing import List, Optional, Dict, Tuple
+from typing import Any, List, Optional, Dict, Tuple
 from dataclasses import dataclass
 
 # Configure logging
@@ -657,7 +657,7 @@ class Transliterator:
         """Check if the IndicXlit model is available."""
         return self._model_available
 
-    def get_status(self) -> Dict[str, any]:
+    def get_status(self) -> Dict[str, Any]:
         """
         Get the current status of the transliterator.
 
