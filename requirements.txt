@@ -5,14 +5,15 @@ streamlit==1.31.0
 transformers==4.37.2
 sentencepiece==0.2.1
 sacremoses
-torch==2.2.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.2.0+cpu
 
 # Language Detection
 langdetect==1.0.9
 
 # Indic Language Processing
 indic-nlp-library==0.92
-ai4bharat-transliteration==1.1.3
+# ai4bharat-transliteration excluded — fairseq build fails on cloud; app auto-falls back to dict
 indic-transliteration        # rule-based ITRANS→Kannada; Python 3.11+ compatible
 
 # Data Processing
@@ -28,12 +29,8 @@ plotly==5.18.0
 # Configuration
 pyyaml==6.0.1
 
-# Testing
-pytest==8.0.0
-
 # Additional dependencies for Indic NLP
 morfessor==2.0.6
-# urduhack==1.1.1  # Removed: has dependency conflicts with tensorflow-addons
 
 # Utilities
 tqdm==4.66.1
