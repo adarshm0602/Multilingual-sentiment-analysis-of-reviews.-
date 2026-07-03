@@ -1,0 +1,554 @@
+{
+  "timestamp": "2026-07-03T15:53:35",
+  "translation_backend": "nllb",
+  "dataset_size": 50,
+  "overall_accuracy": 0.92,
+  "correct": 46,
+  "macro_f1": 0.6257822277847309,
+  "weighted_f1": 0.9011264080100125,
+  "per_class": {
+    "Positive": {
+      "precision": 0.8888888888888888,
+      "recall": 1.0,
+      "f1": 0.9411764705882353,
+      "support": 24
+    },
+    "Negative": {
+      "precision": 0.9565217391304348,
+      "recall": 0.9166666666666666,
+      "f1": 0.9361702127659575,
+      "support": 24
+    },
+    "Neutral": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 2
+    }
+  },
+  "per_script_type": {
+    "English": {
+      "count": 15,
+      "correct": 14,
+      "accuracy": 0.9333333333333333,
+      "macro_f1": 0.6444444444444445
+    },
+    "Kannada Script": {
+      "count": 20,
+      "correct": 19,
+      "accuracy": 0.95,
+      "macro_f1": 0.949874686716792
+    },
+    "Romanized Kannada": {
+      "count": 15,
+      "correct": 13,
+      "accuracy": 0.8666666666666667,
+      "macro_f1": 0.5968253968253968
+    }
+  },
+  "wall_time_s": 1532.782034750002,
+  "avg_time_per_review_s": 30.655640695000038,
+  "classification_report": "              precision    recall  f1-score   support\n\n    Negative       0.96      0.92      0.94        24\n     Neutral       0.00      0.00      0.00         2\n    Positive       0.89      1.00      0.94        24\n\n    accuracy                           0.92        50\n   macro avg       0.62      0.64      0.63        50\nweighted avg       0.89      0.92      0.90        50\n",
+  "reviews": [
+    {
+      "review_id": 1,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 2,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 3,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9993,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 4,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 5,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 6,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 7,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 8,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 9,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 10,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 11,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9997,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 12,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.992,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 13,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9351,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 14,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 15,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Neutral",
+      "predicted_label": "Negative",
+      "correct": false,
+      "confidence_score": 0.9977,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 16,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 17,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 18,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 19,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 20,
+      "script_type": "English",
+      "ground_truth": "Neutral",
+      "predicted_label": "Positive",
+      "correct": false,
+      "confidence_score": 0.9994,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 101,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 102,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 103,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 104,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 105,
+      "script_type": "English",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 106,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 107,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9997,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 108,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 109,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 110,
+      "script_type": "English",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "english",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 111,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 112,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 113,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 114,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 115,
+      "script_type": "Kannada Script",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 116,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 117,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9992,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 118,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 119,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9997,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 120,
+      "script_type": "Kannada Script",
+      "ground_truth": "Negative",
+      "predicted_label": "Positive",
+      "correct": false,
+      "confidence_score": 0.9977,
+      "detected_language": "kannada_script",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 121,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 122,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 123,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 124,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 125,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Positive",
+      "predicted_label": "Positive",
+      "correct": true,
+      "confidence_score": 0.9999,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 126,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 127,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Positive",
+      "correct": false,
+      "confidence_score": 0.9944,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 128,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 129,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.9998,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    },
+    {
+      "review_id": 130,
+      "script_type": "Romanized Kannada",
+      "ground_truth": "Negative",
+      "predicted_label": "Negative",
+      "correct": true,
+      "confidence_score": 0.984,
+      "detected_language": "romanized_kannada",
+      "processing_time_s": 0.0
+    }
+  ]
+}

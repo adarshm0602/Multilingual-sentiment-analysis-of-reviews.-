@@ -96,12 +96,21 @@ Thumbs.db
 
 # Project specific
 data/raw/*
-data/processed/*
-data/models/*
 !data/raw/.gitkeep
+!data/raw/indic_sentiment_kn.jsonl
+data/processed/*
 !data/processed/.gitkeep
+!data/processed/classifier_benchmark_results.json
+!data/processed/pipeline_evaluation_results.json
+!data/processed/pipeline_evaluation_fallback.json
+!data/processed/pipeline_evaluation_nllb.json
+data/models/*
 !data/models/.gitkeep
 *.csv
+!data/demo_data.csv
+data/labeled/*
+!data/labeled/demo_reviews.json
+!data/labeled/extended_reviews.json
 *.pkl
 *.h5
 *.pt

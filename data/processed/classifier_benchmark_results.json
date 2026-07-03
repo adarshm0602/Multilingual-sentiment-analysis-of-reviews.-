@@ -1,0 +1,195 @@
+{
+  "benchmarks": {
+    "kannada_script_indic_sentiment": {
+      "dataset_size": 1154,
+      "train_size": 923,
+      "test_size": 231,
+      "labels": [
+        "Negative",
+        "Positive"
+      ],
+      "classifiers": {
+        "naive_bayes": {
+          "name": "naive_bayes",
+          "accuracy": 0.8138528138528138,
+          "macro_f1": 0.8127156513377454,
+          "weighted_f1": 0.8127788270330268,
+          "positive_f1": 0.8273092369477911,
+          "negative_f1": 0.7981220657276995,
+          "neutral_f1": 0.0,
+          "per_class": {
+            "Negative": {
+              "precision": 0.8673469387755102,
+              "recall": 0.7391304347826086,
+              "f1": 0.7981220657276995,
+              "support": 115
+            },
+            "Positive": {
+              "precision": 0.7744360902255639,
+              "recall": 0.8879310344827587,
+              "f1": 0.8273092369477911,
+              "support": 116
+            }
+          }
+        },
+        "logistic_regression": {
+          "name": "logistic_regression",
+          "accuracy": 0.8268398268398268,
+          "macro_f1": 0.8268365817091454,
+          "weighted_f1": 0.826833336578464,
+          "positive_f1": 0.8260869565217391,
+          "negative_f1": 0.8275862068965517,
+          "neutral_f1": 0.0,
+          "per_class": {
+            "Negative": {
+              "precision": 0.8205128205128205,
+              "recall": 0.8347826086956521,
+              "f1": 0.8275862068965517,
+              "support": 115
+            },
+            "Positive": {
+              "precision": 0.8333333333333334,
+              "recall": 0.8189655172413793,
+              "f1": 0.8260869565217391,
+              "support": 116
+            }
+          }
+        },
+        "linear_svm": {
+          "name": "linear_svm",
+          "accuracy": 0.8268398268398268,
+          "macro_f1": 0.8268106162843005,
+          "weighted_f1": 0.8268203531361427,
+          "positive_f1": 0.8290598290598291,
+          "negative_f1": 0.8245614035087719,
+          "neutral_f1": 0.0,
+          "per_class": {
+            "Negative": {
+              "precision": 0.831858407079646,
+              "recall": 0.8173913043478261,
+              "f1": 0.8245614035087719,
+              "support": 115
+            },
+            "Positive": {
+              "precision": 0.8220338983050848,
+              "recall": 0.8362068965517241,
+              "f1": 0.8290598290598291,
+              "support": 116
+            }
+          }
+        }
+      },
+      "best_classifier": "logistic_regression",
+      "best_macro_f1": 0.8268365817091454,
+      "best_weighted_f1": 0.826833336578464,
+      "baseline_classifier": "naive_bayes",
+      "baseline_macro_f1": 0.8127156513377454,
+      "classification_report": "              precision    recall  f1-score   support\n\n    Negative       0.82      0.83      0.83       115\n    Positive       0.83      0.82      0.83       116\n\n    accuracy                           0.83       231\n   macro avg       0.83      0.83      0.83       231\nweighted avg       0.83      0.83      0.83       231\n"
+    },
+    "multilingual_hand_labeled": {
+      "dataset_size": 50,
+      "train_size": 40,
+      "test_size": 10,
+      "labels": [
+        "Negative",
+        "Neutral",
+        "Positive"
+      ],
+      "classifiers": {
+        "naive_bayes": {
+          "name": "naive_bayes",
+          "accuracy": 0.9,
+          "macro_f1": 0.898989898989899,
+          "weighted_f1": 0.898989898989899,
+          "positive_f1": 0.8888888888888888,
+          "negative_f1": 0.9090909090909091,
+          "neutral_f1": 0.0,
+          "per_class": {
+            "Negative": {
+              "precision": 0.8333333333333334,
+              "recall": 1.0,
+              "f1": 0.9090909090909091,
+              "support": 5
+            },
+            "Neutral": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0
+            },
+            "Positive": {
+              "precision": 1.0,
+              "recall": 0.8,
+              "f1": 0.8888888888888888,
+              "support": 5
+            }
+          }
+        },
+        "logistic_regression": {
+          "name": "logistic_regression",
+          "accuracy": 0.8,
+          "macro_f1": 0.7916666666666667,
+          "weighted_f1": 0.7916666666666667,
+          "positive_f1": 0.75,
+          "negative_f1": 0.8333333333333334,
+          "neutral_f1": 0.0,
+          "per_class": {
+            "Negative": {
+              "precision": 0.7142857142857143,
+              "recall": 1.0,
+              "f1": 0.8333333333333334,
+              "support": 5
+            },
+            "Neutral": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0
+            },
+            "Positive": {
+              "precision": 1.0,
+              "recall": 0.6,
+              "f1": 0.75,
+              "support": 5
+            }
+          }
+        },
+        "linear_svm": {
+          "name": "linear_svm",
+          "accuracy": 0.8,
+          "macro_f1": 0.7916666666666667,
+          "weighted_f1": 0.7916666666666667,
+          "positive_f1": 0.75,
+          "negative_f1": 0.8333333333333334,
+          "neutral_f1": 0.0,
+          "per_class": {
+            "Negative": {
+              "precision": 0.7142857142857143,
+              "recall": 1.0,
+              "f1": 0.8333333333333334,
+              "support": 5
+            },
+            "Neutral": {
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "support": 0
+            },
+            "Positive": {
+              "precision": 1.0,
+              "recall": 0.6,
+              "f1": 0.75,
+              "support": 5
+            }
+          }
+        }
+      },
+      "best_classifier": "naive_bayes",
+      "best_macro_f1": 0.898989898989899,
+      "best_weighted_f1": 0.898989898989899,
+      "baseline_classifier": "naive_bayes",
+      "baseline_macro_f1": 0.898989898989899,
+      "classification_report": "              precision    recall  f1-score   support\n\n    Negative       0.83      1.00      0.91         5\n    Positive       1.00      0.80      0.89         5\n\n    accuracy                           0.90        10\n   macro avg       0.92      0.90      0.90        10\nweighted avg       0.92      0.90      0.90        10\n"
+    }
+  }
+}
